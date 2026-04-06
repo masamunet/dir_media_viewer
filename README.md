@@ -1,42 +1,77 @@
-# sv
+# Dir Media Viewer
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+ディレクトリ内の画像・動画をグリッドで一覧表示する軽量メディアビューワー。
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## セットアップ
 
 ```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.14.1 create --template minimal --types ts --no-install .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+ブラウザで `http://localhost:5173` を開く。
 
-To create a production version of your app:
+## 使い方
 
-```sh
-npm run build
-```
+### 基本操作
 
-You can preview the production build with `npm run preview`.
+1. ブラウザにメディアを含むディレクトリをドラッグ&ドロップ
+2. グリッドに画像・動画が一覧表示される
+3. 動画はグリッド上で無音ループ再生
+4. アイテムをクリックで拡大表示
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### ツールバー機能
+
+| 機能 | 説明 |
+|------|------|
+| Recursive | 2階層下のサブディレクトリまで再帰的にメディアを読み込む |
+| All / Image / Video | メディアタイプでフィルタリング |
+| 大 / 中 / 小 | グリッドサイズ切替 |
+| Clear | 表示をクリアして初期画面に戻る |
+
+### キーボードショートカット
+
+| キー | 機能 |
+|------|------|
+| `R` | Recursive トグル |
+| `A` | フィルター: All |
+| `I` | フィルター: Image |
+| `V` | フィルター: Video |
+| `1` | グリッド: 大 |
+| `2` | グリッド: 中 |
+| `3` | グリッド: 小 |
+| `Esc` | 表示クリア |
+| `Tab` / `Shift+Tab` | アイテム間フォーカス移動 |
+| 矢印キー | グリッド内カーソル移動 |
+| `Space` / `Enter` | 選択（拡大表示） |
+| `Space` / `Esc` | 拡大表示を閉じる |
+
+### 拡大表示
+
+- クリックまたはオーバーレイクリックで閉じる
+- 原寸 / ブラウザフィット表示を切替可能
+- ダウンロードボタンで再エンコード（メタデータ除去）してダウンロード
+  - 画像 → JPEG
+  - 動画 → MP4
+
+### 設定の保持
+
+以下の設定はlocalStorageに保存され、次回アクセス時に復元される:
+
+- グリッドサイズ（大/中/小）
+- ダイアログ表示サイズ（原寸/フィット）
+- メディアフィルター（All/Image/Video）
+
+Recursiveモードは毎回OFFで開始する。
+
+## 前提条件
+
+- Node.js 18+
+- 再エンコード機能を使う場合: ffmpeg がシステムにインストール済みであること
+
+## 技術スタック
+
+- SvelteKit (Svelte 5)
+- TailwindCSS v4
+- Bits UI v2
+- Lucide Svelte
