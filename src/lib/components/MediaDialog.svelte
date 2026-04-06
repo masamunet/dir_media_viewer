@@ -33,8 +33,10 @@
 			const a = document.createElement('a');
 			a.href = url;
 			a.download = `${baseName}.${ext}`;
+			document.body.appendChild(a);
 			a.click();
-			URL.revokeObjectURL(url);
+			document.body.removeChild(a);
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
 		} catch (e) {
 			console.error('Convert error:', e);
 		} finally {
@@ -54,7 +56,11 @@
 			class="fixed inset-0 z-50 flex items-center justify-center p-4 focus-visible:outline-none"
 			onpointerdownoutside={() => (open = false)}
 			onkeydown={(e: KeyboardEvent) => {
-				if (e.key === ' ' || e.key === 'Escape') {
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					open = false;
+				}
+				if (e.key === ' ' && media?.type !== 'video') {
 					e.preventDefault();
 					open = false;
 				}

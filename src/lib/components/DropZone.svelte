@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Upload } from 'lucide-svelte';
 
-	let { ondrop, active = false }: { ondrop: (e: DragEvent) => void; active: boolean } = $props();
+	let { active = false }: { active: boolean } = $props();
 </script>
 
 {#if active}

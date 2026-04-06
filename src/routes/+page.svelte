@@ -14,6 +14,7 @@
 	let dialogOpen = $state(false);
 
 	let dragCounter = 0;
+	let scanGeneration = 0;
 
 	function handleDragEnter(e: DragEvent) {
 		e.preventDefault();
@@ -41,17 +42,25 @@
 
 		if (!e.dataTransfer) return;
 
+		const gen = ++scanGeneration;
 		loading = true;
+		dialogOpen = false;
+		selectedMedia = null;
+
 		try {
 			clearMedia();
 			const { files, dirName, dirEntry } = await processDropEvent(e.dataTransfer, $recursive);
+			if (gen !== scanGeneration) {
+				files.forEach((f) => URL.revokeObjectURL(f.url));
+				return;
+			}
 			mediaFiles.set(files);
 			directoryName.set(dirName);
 			setDirEntry(dirEntry);
 		} catch (err) {
 			console.error('Drop error:', err);
 		} finally {
-			loading = false;
+			if (gen === scanGeneration) loading = false;
 		}
 	}
 
@@ -59,25 +68,37 @@
 		const entry = getDirEntry();
 		if (!entry) return;
 
+		const gen = ++scanGeneration;
 		loading = true;
+		dialogOpen = false;
+		selectedMedia = null;
+
 		try {
-			// Revoke old URLs
 			mediaFiles.update((files) => {
 				files.forEach((f) => URL.revokeObjectURL(f.url));
 				return [];
 			});
 			const files = await rescanDirectory(entry, $recursive);
+			if (gen !== scanGeneration) {
+				files.forEach((f) => URL.revokeObjectURL(f.url));
+				return;
+			}
 			mediaFiles.set(files);
 		} catch (err) {
 			console.error('Rescan error:', err);
 		} finally {
-			loading = false;
+			if (gen === scanGeneration) loading = false;
 		}
 	}
 
 	// Re-scan when recursive toggle changes while a directory is loaded
+	let initialMount = true;
 	$effect(() => {
-		const r = $recursive;
+		const _r = $recursive;
+		if (initialMount) {
+			initialMount = false;
+			return;
+		}
 		if (getDirEntry()) {
 			handleRescan();
 		}
@@ -89,6 +110,8 @@
 	}
 
 	function handleClear() {
+		dialogOpen = false;
+		selectedMedia = null;
 		clearMedia();
 	}
 
@@ -148,7 +171,7 @@
 	onkeydown={handleKeydown}
 />
 
-<DropZone ondrop={handleDrop} active={dragOver} />
+<DropZone active={dragOver} />
 
 {#if $directoryName}
 	<Toolbar dirName={$directoryName} fileCount={$mediaFiles.length} onClear={handleClear} />

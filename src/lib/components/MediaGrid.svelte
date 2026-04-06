@@ -12,6 +12,7 @@
 	let sentinelEl: HTMLDivElement;
 	let averageAspect = $state(1);
 	let displayCount = $state(BATCH_SIZE);
+	let aspectGeneration = 0;
 
 	const filteredFiles = $derived(
 		$mediaFilter === 'all'
@@ -29,7 +30,6 @@
 
 	// Reset display count when filter or files change
 	$effect(() => {
-		// Touch reactive deps
 		$mediaFilter;
 		files;
 		displayCount = BATCH_SIZE;
@@ -51,13 +51,14 @@
 		computeAverageAspect(files);
 	});
 
-	// Infinite scroll observer
+	// Infinite scroll observer - re-creates when sentinelEl or filteredFiles changes
 	$effect(() => {
-		if (!sentinelEl || !hasMore) return;
+		if (!sentinelEl) return;
+		const currentFiltered = filteredFiles;
 		const observer = new IntersectionObserver(
 			([entry]) => {
-				if (entry.isIntersecting) {
-					displayCount = Math.min(displayCount + BATCH_SIZE, filteredFiles.length);
+				if (entry.isIntersecting && displayCount < currentFiltered.length) {
+					displayCount = Math.min(displayCount + BATCH_SIZE, currentFiltered.length);
 				}
 			},
 			{ rootMargin: '400px' }
@@ -67,6 +68,7 @@
 	});
 
 	async function computeAverageAspect(mediaFiles: MediaFile[]) {
+		const gen = ++aspectGeneration;
 		const samples = mediaFiles.slice(0, 20);
 		const ratios: number[] = [];
 
@@ -75,14 +77,15 @@
 				(m) =>
 					new Promise<void>((resolve) => {
 						if (m.type === 'image') {
-							const img = new Image();
+							const img = new window.Image();
 							img.onload = () => {
 								if (img.naturalHeight > 0) {
 									ratios.push(img.naturalWidth / img.naturalHeight);
 								}
+								img.src = '';
 								resolve();
 							};
-							img.onerror = () => resolve();
+							img.onerror = () => { img.src = ''; resolve(); };
 							img.src = m.url;
 						} else {
 							const video = document.createElement('video');
@@ -90,14 +93,18 @@
 								if (video.videoHeight > 0) {
 									ratios.push(video.videoWidth / video.videoHeight);
 								}
+								video.src = '';
+								video.load();
 								resolve();
 							};
-							video.onerror = () => resolve();
+							video.onerror = () => { video.src = ''; resolve(); };
 							video.src = m.url;
 						}
 					})
 			)
 		);
+
+		if (gen !== aspectGeneration) return;
 
 		if (ratios.length > 0) {
 			averageAspect = ratios.reduce((a, b) => a + b, 0) / ratios.length;
@@ -116,7 +123,7 @@
 		const firstTop = cards[0].getBoundingClientRect().top;
 		let cols = 1;
 		for (let i = 1; i < cards.length; i++) {
-			if (cards[i].getBoundingClientRect().top === firstTop) cols++;
+			if (Math.abs(cards[i].getBoundingClientRect().top - firstTop) < 2) cols++;
 			else break;
 		}
 		return cols;

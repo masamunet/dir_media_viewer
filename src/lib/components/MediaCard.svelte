@@ -15,16 +15,18 @@
 	} = $props();
 
 	let el: HTMLButtonElement;
+	let videoEl: HTMLVideoElement | undefined = $state();
 	let visible = $state(false);
+	let inViewport = $state(false);
 	let loaded = $state(false);
 
 	$effect(() => {
 		if (!el) return;
 		const observer = new IntersectionObserver(
 			([entry]) => {
-				if (entry.isIntersecting) {
+				inViewport = entry.isIntersecting;
+				if (entry.isIntersecting && !visible) {
 					visible = true;
-					observer.disconnect();
 				}
 			},
 			{ threshold: 0.08, rootMargin: '40px' }
@@ -33,8 +35,19 @@
 		return () => observer.disconnect();
 	});
 
+	// Play/pause video based on viewport visibility
+	$effect(() => {
+		if (!videoEl) return;
+		if (inViewport) {
+			const el = videoEl;
+			const playPromise = el.play().catch(() => {});
+			return () => { playPromise.then(() => el?.pause()).catch(() => {}); };
+		} else {
+			videoEl.pause();
+		}
+	});
+
 	function handleFocus() {
-		// Once focused via Tab, make all cards tabbable
 		const grid = el?.parentElement;
 		if (!grid) return;
 		grid.querySelectorAll<HTMLButtonElement>(':scope > button').forEach((btn) => {
@@ -53,7 +66,6 @@
 	type="button"
 	{tabindex}
 >
-	<!-- Loading skeleton -->
 	{#if !loaded}
 		<div class="absolute inset-0 flex items-center justify-center">
 			<div class="absolute inset-0 animate-pulse bg-[var(--surface-3)]/50"></div>
@@ -64,13 +76,14 @@
 
 	{#if media.type === 'video'}
 		<video
+			bind:this={videoEl}
 			src={media.url}
 			class="h-full w-full object-cover transition-opacity duration-300 {loaded ? 'opacity-100' : 'opacity-0'}"
 			muted
 			loop
-			autoplay
 			playsinline
 			disablepictureinpicture
+			preload="metadata"
 			onloadeddata={() => (loaded = true)}
 		></video>
 		{#if loaded}

@@ -44,7 +44,6 @@ export async function readDirectory(
 	basePath = ''
 ): Promise<MediaFile[]> {
 	const maxDepth = recursive ? 2 : 0;
-	if (currentDepth > maxDepth) return [];
 
 	const reader = entry.createReader();
 	const entries = await readAllEntries(reader);
