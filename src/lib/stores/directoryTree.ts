@@ -123,12 +123,15 @@ export function moveCursorToChild() {
 	cursorPath.set(firstChildPath);
 }
 
-/** Open cursor node: select it (show files in grid) + expand its children */
-export function openCursorNode() {
-	const current = get(cursorPath);
-	selectedPath.set(current);
-	expandNode(current);
+/** Open a node: select it (show files in grid) + expand its children */
+export function openNode(path?: string) {
+	const target = path ?? get(cursorPath);
+	selectedPath.set(target);
+	expandNode(target);
 }
+
+/** @deprecated Use openNode() instead */
+export const openCursorNode = openNode;
 
 export function resetTree() {
 	treeFiles.update((files) => {

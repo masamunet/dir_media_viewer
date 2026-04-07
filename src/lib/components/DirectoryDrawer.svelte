@@ -36,7 +36,7 @@
 		top: 0;
 		left: 0;
 		bottom: 0;
-		width: 280px;
+		width: var(--drawer-width);
 		z-index: 35;
 		display: flex;
 		flex-direction: column;

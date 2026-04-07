@@ -6,7 +6,7 @@
 		selectedPath,
 		expandNode,
 		collapseNode,
-		openCursorNode
+		openNode
 	} from '$lib/stores/directoryTree';
 
 	interface Props {
@@ -17,7 +17,7 @@
 
 	function handleNodeClick(node: TreeNode) {
 		cursorPath.set(node.path);
-		openCursorNode();
+		openNode(node.path);
 	}
 
 	function handleChevronClick(e: MouseEvent, node: TreeNode) {
@@ -40,6 +40,9 @@
 		style="padding-left: {12 + depth * 16}px"
 		onclick={() => handleNodeClick(node)}
 		data-path={node.path}
+		role="treeitem"
+		aria-expanded={node.children.length > 0 ? node.isExpanded : undefined}
+		aria-current={isCursor ? 'true' : undefined}
 	>
 		{#if node.children.length > 0}
 			<span
@@ -71,7 +74,7 @@
 	{/if}
 {/snippet}
 
-<div class="tree-container">
+<div class="tree-container" role="tree">
 	{@render treeItem(root, 0)}
 </div>
 

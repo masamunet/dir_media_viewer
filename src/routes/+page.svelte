@@ -20,7 +20,7 @@
 	import {
 		drawerOpen, treeRoot, cursorPath, selectedPath, treeFiles,
 		findNode, resetTree,
-		moveCursorUp, moveCursorDown, moveCursorToParent, moveCursorToChild, openCursorNode
+		moveCursorUp, moveCursorDown, moveCursorToParent, moveCursorToChild, openNode
 	} from '$lib/stores/directoryTree';
 
 	let dragOver = $state(false);
@@ -28,8 +28,8 @@
 	let selectedMedia = $state<MediaFile | null>(null);
 	let dialogOpen = $state(false);
 
-	// When tree has files loaded, always show them (even if drawer is closed)
-	const displayFiles = $derived($treeFiles.length > 0 ? $treeFiles : $mediaFiles);
+	// When tree mode is active, show tree-selected files (even if drawer is closed)
+	const displayFiles = $derived($treeRoot ? $treeFiles : $mediaFiles);
 
 	const filteredFiles = $derived(
 		$mediaFilter === 'all'
@@ -301,6 +301,8 @@
 					e.preventDefault();
 					return;
 				}
+				// Defensively clear any residual timer
+				if (shiftTimer) { clearTimeout(shiftTimer); shiftTimer = null; }
 				shiftState = 'shift_down';
 				shiftComboUsed = false;
 				return;
@@ -313,7 +315,7 @@
 			if (e.key === ' ' && !e.shiftKey) {
 				e.preventDefault();
 				e.stopImmediatePropagation();
-				openCursorNode();
+				openNode();
 				return;
 			}
 
@@ -450,8 +452,16 @@
 <DirectoryDrawer open={$drawerOpen} root={$treeRoot} />
 
 {#if $directoryName}
-	<div style="margin-left: {$drawerOpen ? '280px' : '0'}; transition: margin-left 0.2s ease">
-		<Toolbar dirName={$directoryName} fileCount={displayFiles.length} onClear={handleClear} treePath={$drawerOpen ? $selectedPath : ''} hasTree={!!$treeRoot} drawerOpen={$drawerOpen} onToggleDrawer={() => drawerOpen.update(v => !v)} />
+	<div style="margin-left: {$drawerOpen ? 'var(--drawer-width)' : '0'}; transition: margin-left 0.2s ease">
+		<Toolbar
+			dirName={$directoryName}
+			fileCount={displayFiles.length}
+			onClear={handleClear}
+			treePath={$drawerOpen ? ($selectedPath || '.') : ''}
+			hasTree={!!$treeRoot}
+			drawerOpen={$drawerOpen}
+			onToggleDrawer={() => drawerOpen.update(v => !v)}
+		/>
 		{#if loading}
 			<div class="flex flex-col items-center justify-center py-32 gap-3">
 				<div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"></div>

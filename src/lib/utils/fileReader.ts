@@ -179,27 +179,34 @@ export async function rescanDirectoryHandle(
 
 // --- Directory Tree scanning (directories only, unlimited depth) ---
 
+const TREE_MAX_DEPTH = 20;
+
 export async function scanDirectoryTreeFromEntry(
 	entry: FileSystemDirectoryEntry,
-	basePath = ''
+	basePath = '',
+	currentDepth = 0
 ): Promise<TreeNode> {
-	const reader = entry.createReader();
-	const entries = await readAllEntries(reader);
 	const children: TreeNode[] = [];
 
-	for (const child of entries) {
-		if (child.name.startsWith('.')) continue;
-		if (!child.isDirectory) continue;
+	if (currentDepth < TREE_MAX_DEPTH) {
+		const reader = entry.createReader();
+		const entries = await readAllEntries(reader);
 
-		const childPath = basePath ? `${basePath}/${child.name}` : child.name;
-		const childNode = await scanDirectoryTreeFromEntry(
-			child as FileSystemDirectoryEntry,
-			childPath
-		);
-		children.push(childNode);
+		for (const child of entries) {
+			if (child.name.startsWith('.')) continue;
+			if (!child.isDirectory) continue;
+
+			const childPath = basePath ? `${basePath}/${child.name}` : child.name;
+			const childNode = await scanDirectoryTreeFromEntry(
+				child as FileSystemDirectoryEntry,
+				childPath,
+				currentDepth + 1
+			);
+			children.push(childNode);
+		}
+
+		children.sort((a, b) => a.name.localeCompare(b.name));
 	}
-
-	children.sort((a, b) => a.name.localeCompare(b.name));
 
 	return {
 		name: entry.name,
@@ -212,23 +219,27 @@ export async function scanDirectoryTreeFromEntry(
 
 export async function scanDirectoryTreeFromHandle(
 	handle: FileSystemDirectoryHandle,
-	basePath = ''
+	basePath = '',
+	currentDepth = 0
 ): Promise<TreeNode> {
 	const children: TreeNode[] = [];
 
-	for await (const [name, childHandle] of handle.entries()) {
-		if (name.startsWith('.')) continue;
-		if (childHandle.kind !== 'directory') continue;
+	if (currentDepth < TREE_MAX_DEPTH) {
+		for await (const [name, childHandle] of handle.entries()) {
+			if (name.startsWith('.')) continue;
+			if (childHandle.kind !== 'directory') continue;
 
-		const childPath = basePath ? `${basePath}/${name}` : name;
-		const childNode = await scanDirectoryTreeFromHandle(
-			childHandle,
-			childPath
-		);
-		children.push(childNode);
+			const childPath = basePath ? `${basePath}/${name}` : name;
+			const childNode = await scanDirectoryTreeFromHandle(
+				childHandle,
+				childPath,
+				currentDepth + 1
+			);
+			children.push(childNode);
+		}
+
+		children.sort((a, b) => a.name.localeCompare(b.name));
 	}
-
-	children.sort((a, b) => a.name.localeCompare(b.name));
 
 	return {
 		name: handle.name,
