@@ -1,4 +1,5 @@
 import type { MediaFile } from '$lib/stores/media';
+import type { TreeNode } from '$lib/stores/directoryTree';
 
 const IMAGE_EXTS = new Set([
 	'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif', 'tiff', 'tif', 'heic', 'heif'
@@ -174,4 +175,131 @@ export async function rescanDirectoryHandle(
 	recursive: boolean
 ): Promise<MediaFile[]> {
 	return readDirectoryHandle(handle, recursive);
+}
+
+// --- Directory Tree scanning (directories only, unlimited depth) ---
+
+const TREE_MAX_DEPTH = 20;
+
+export async function scanDirectoryTreeFromEntry(
+	entry: FileSystemDirectoryEntry,
+	basePath = '',
+	currentDepth = 0
+): Promise<TreeNode> {
+	const children: TreeNode[] = [];
+
+	if (currentDepth < TREE_MAX_DEPTH) {
+		const reader = entry.createReader();
+		const entries = await readAllEntries(reader);
+
+		for (const child of entries) {
+			if (child.name.startsWith('.')) continue;
+			if (!child.isDirectory) continue;
+
+			const childPath = basePath ? `${basePath}/${child.name}` : child.name;
+			const childNode = await scanDirectoryTreeFromEntry(
+				child as FileSystemDirectoryEntry,
+				childPath,
+				currentDepth + 1
+			);
+			children.push(childNode);
+		}
+
+		children.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	return {
+		name: entry.name,
+		path: basePath,
+		children,
+		isExpanded: basePath === '', // root starts expanded
+		dirEntry: entry
+	};
+}
+
+export async function scanDirectoryTreeFromHandle(
+	handle: FileSystemDirectoryHandle,
+	basePath = '',
+	currentDepth = 0
+): Promise<TreeNode> {
+	const children: TreeNode[] = [];
+
+	if (currentDepth < TREE_MAX_DEPTH) {
+		for await (const [name, childHandle] of handle.entries()) {
+			if (name.startsWith('.')) continue;
+			if (childHandle.kind !== 'directory') continue;
+
+			const childPath = basePath ? `${basePath}/${name}` : name;
+			const childNode = await scanDirectoryTreeFromHandle(
+				childHandle,
+				childPath,
+				currentDepth + 1
+			);
+			children.push(childNode);
+		}
+
+		children.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	return {
+		name: handle.name,
+		path: basePath,
+		children,
+		isExpanded: basePath === '',
+		dirHandle: handle
+	};
+}
+
+// --- Shallow (single-level) file reading ---
+
+export async function readDirectoryShallowEntry(
+	entry: FileSystemDirectoryEntry
+): Promise<MediaFile[]> {
+	const reader = entry.createReader();
+	const entries = await readAllEntries(reader);
+	const results: MediaFile[] = [];
+
+	for (const child of entries) {
+		if (child.name.startsWith('.')) continue;
+		if (!child.isFile) continue;
+
+		const type = getMediaType(child.name);
+		if (type) {
+			const file = await fileEntryToFile(child as FileSystemFileEntry);
+			results.push({
+				name: child.name,
+				path: child.name,
+				type,
+				file,
+				url: URL.createObjectURL(file)
+			});
+		}
+	}
+
+	return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function readDirectoryShallowHandle(
+	handle: FileSystemDirectoryHandle
+): Promise<MediaFile[]> {
+	const results: MediaFile[] = [];
+
+	for await (const [name, childHandle] of handle.entries()) {
+		if (name.startsWith('.')) continue;
+		if (childHandle.kind !== 'file') continue;
+
+		const type = getMediaType(name);
+		if (type) {
+			const file = await childHandle.getFile();
+			results.push({
+				name,
+				path: name,
+				type,
+				file,
+				url: URL.createObjectURL(file)
+			});
+		}
+	}
+
+	return results.sort((a, b) => a.name.localeCompare(b.name));
 }

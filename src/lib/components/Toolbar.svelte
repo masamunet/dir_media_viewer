@@ -1,8 +1,16 @@
 <script lang="ts">
-	import { Columns2, Grid2x2, Grid3x3, FolderTree, X, Image, Film, Layers } from 'lucide-svelte';
+	import { Columns2, Grid2x2, Grid3x3, FolderTree, X, Image, Film, Layers, PanelLeftOpen, PanelLeftClose } from 'lucide-svelte';
 	import { gridSize, recursive, mediaFilter, type GridSize, type MediaFilter } from '$lib/stores/preferences';
 
-	let { dirName = '', fileCount = 0, onClear }: { dirName: string; fileCount: number; onClear: () => void } = $props();
+	let { dirName = '', fileCount = 0, onClear, treePath = '', hasTree = false, drawerOpen = false, onToggleDrawer }: {
+		dirName: string;
+		fileCount: number;
+		onClear: () => void;
+		treePath?: string;
+		hasTree?: boolean;
+		drawerOpen?: boolean;
+		onToggleDrawer?: () => void;
+	} = $props();
 
 	const sizes: { value: GridSize; icon: typeof Grid2x2; label: string; key: string }[] = [
 		{ value: 'lg', icon: Columns2, label: '大', key: '1' },
@@ -19,7 +27,26 @@
 
 <header class="sticky top-0 z-40 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-0)]/95 px-4 py-2 backdrop-blur-sm">
 	<div class="flex items-center gap-2 overflow-hidden">
+		{#if hasTree}
+			<button
+				tabindex={-1}
+				class="shrink-0 rounded-[var(--radius-sm)] p-1 transition-colors
+					{drawerOpen ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
+				onclick={onToggleDrawer}
+				title="ディレクトリツリー [⇧⇧]"
+			>
+				{#if drawerOpen}
+					<PanelLeftClose class="h-4 w-4" />
+				{:else}
+					<PanelLeftOpen class="h-4 w-4" />
+				{/if}
+			</button>
+		{/if}
 		<span class="truncate text-sm font-medium text-[var(--accent-cyan)]">{dirName}</span>
+		{#if treePath}
+			<span class="shrink-0 text-xs text-[var(--text-muted)]">/</span>
+			<span class="truncate text-xs text-[var(--text-secondary)]">{treePath}</span>
+		{/if}
 		<span class="shrink-0 text-xs text-[var(--text-muted)]">{fileCount}</span>
 	</div>
 
