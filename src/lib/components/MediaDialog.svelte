@@ -6,11 +6,13 @@
 	import type { MediaFile } from '$lib/stores/media';
 
 	let {
-		media,
-		open = $bindable(false)
+		media = $bindable<MediaFile | null>(null),
+		open = $bindable(false),
+		files = []
 	}: {
 		media: MediaFile | null;
 		open: boolean;
+		files: MediaFile[];
 	} = $props();
 
 	let converting = $state(false);

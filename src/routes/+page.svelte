@@ -18,6 +18,12 @@
 	let selectedMedia = $state<MediaFile | null>(null);
 	let dialogOpen = $state(false);
 
+	const filteredFiles = $derived(
+		$mediaFilter === 'all'
+			? $mediaFiles
+			: $mediaFiles.filter((f) => f.type === $mediaFilter)
+	);
+
 	let dragCounter = 0;
 	let scanGeneration = 0;
 
@@ -140,6 +146,47 @@
 		}
 	});
 
+	function navigateDialog(direction: 1 | -1) {
+		if (!selectedMedia || filteredFiles.length === 0) return;
+		const idx = filteredFiles.findIndex((f) => f.url === selectedMedia!.url);
+		if (idx === -1) return;
+		const next = idx + direction;
+		if (next < 0 || next >= filteredFiles.length) return;
+		selectedMedia = filteredFiles[next];
+	}
+
+	// ダイアログ表示中のキーボード操作（captureフェーズで確実にキャッチ）
+	$effect(() => {
+		function onKeydown(e: KeyboardEvent) {
+			if (!dialogOpen) return;
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+			switch (e.key) {
+				case 'ArrowLeft':
+				case 'h':
+				case 'k':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					navigateDialog(-1);
+					break;
+				case 'ArrowRight':
+				case 'l':
+				case 'j':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					navigateDialog(1);
+					break;
+				case 'Escape':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					dialogOpen = false;
+					break;
+			}
+		}
+		window.addEventListener('keydown', onKeydown, true);
+		return () => window.removeEventListener('keydown', onKeydown, true);
+	});
+
 	function openDialog(file: MediaFile) {
 		selectedMedia = file;
 		dialogOpen = true;
@@ -253,4 +300,4 @@
 	</div>
 {/if}
 
-<MediaDialog media={selectedMedia} bind:open={dialogOpen} />
+<MediaDialog bind:media={selectedMedia} bind:open={dialogOpen} files={filteredFiles} />
