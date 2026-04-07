@@ -4,6 +4,7 @@
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import MediaGrid from '$lib/components/MediaGrid.svelte';
 	import MediaDialog from '$lib/components/MediaDialog.svelte';
+	import DirectoryDrawer from '$lib/components/DirectoryDrawer.svelte';
 	import {
 		mediaFiles, directoryName, clearMedia,
 		setDirEntry, getDirEntry,
@@ -11,17 +12,29 @@
 		type MediaFile
 	} from '$lib/stores/media';
 	import { recursive, mediaFilter, gridSize } from '$lib/stores/preferences';
-	import { processDropEvent, rescanDirectory, pickDirectory, rescanDirectoryHandle } from '$lib/utils/fileReader';
+	import {
+		processDropEvent, rescanDirectory, pickDirectory, rescanDirectoryHandle,
+		scanDirectoryTreeFromEntry, scanDirectoryTreeFromHandle,
+		readDirectoryShallowEntry, readDirectoryShallowHandle
+	} from '$lib/utils/fileReader';
+	import {
+		drawerOpen, treeRoot, cursorPath, selectedPath, treeFiles,
+		findNode, resetTree,
+		moveCursorUp, moveCursorDown, moveCursorToParent, moveCursorToChild, openCursorNode
+	} from '$lib/stores/directoryTree';
 
 	let dragOver = $state(false);
 	let loading = $state(false);
 	let selectedMedia = $state<MediaFile | null>(null);
 	let dialogOpen = $state(false);
 
+	// When tree has files loaded, always show them (even if drawer is closed)
+	const displayFiles = $derived($treeFiles.length > 0 ? $treeFiles : $mediaFiles);
+
 	const filteredFiles = $derived(
 		$mediaFilter === 'all'
-			? $mediaFiles
-			: $mediaFiles.filter((f) => f.type === $mediaFilter)
+			? displayFiles
+			: displayFiles.filter((f) => f.type === $mediaFilter)
 	);
 
 	let dragCounter = 0;
@@ -60,6 +73,7 @@
 
 		try {
 			clearMedia();
+			resetTree();
 			const { files, dirName, dirEntry } = await processDropEvent(e.dataTransfer, $recursive);
 			if (gen !== scanGeneration) {
 				files.forEach((f) => URL.revokeObjectURL(f.url));
@@ -68,6 +82,23 @@
 			mediaFiles.set(files);
 			directoryName.set(dirName);
 			setDirEntry(dirEntry);
+
+			// Build directory tree and open drawer
+			if (dirEntry) {
+				const tree = await scanDirectoryTreeFromEntry(dirEntry);
+				if (gen !== scanGeneration) return;
+				treeRoot.set(tree);
+				cursorPath.set(tree.path);
+				selectedPath.set(tree.path);
+				drawerOpen.set(true);
+				// Load root's shallow files
+				const shallowFiles = await readDirectoryShallowEntry(dirEntry);
+				if (gen !== scanGeneration) {
+					shallowFiles.forEach((f) => URL.revokeObjectURL(f.url));
+					return;
+				}
+				treeFiles.set(shallowFiles);
+			}
 		} catch (err) {
 			console.error('Drop error:', err);
 		} finally {
@@ -83,6 +114,7 @@
 
 		try {
 			clearMedia();
+			resetTree();
 			const result = await pickDirectory($recursive);
 			if (!result || gen !== scanGeneration) {
 				result?.files.forEach((f) => URL.revokeObjectURL(f.url));
@@ -92,6 +124,21 @@
 			mediaFiles.set(result.files);
 			directoryName.set(result.dirName);
 			setDirHandle(result.dirHandle);
+
+			// Build directory tree and open drawer
+			const tree = await scanDirectoryTreeFromHandle(result.dirHandle);
+			if (gen !== scanGeneration) return;
+			treeRoot.set(tree);
+			cursorPath.set(tree.path);
+			selectedPath.set(tree.path);
+			drawerOpen.set(true);
+			// Load root's shallow files
+			const shallowFiles = await readDirectoryShallowHandle(result.dirHandle);
+			if (gen !== scanGeneration) {
+				shallowFiles.forEach((f) => URL.revokeObjectURL(f.url));
+				return;
+			}
+			treeFiles.set(shallowFiles);
 		} catch (err) {
 			console.error('Pick error:', err);
 		} finally {
@@ -132,6 +179,45 @@
 			if (gen === scanGeneration) loading = false;
 		}
 	}
+
+	// Load files when selected tree node changes
+	let treeFileGeneration = 0;
+	$effect(() => {
+		const path = $selectedPath;
+		const root = $treeRoot;
+		const isOpen = $drawerOpen;
+		if (!isOpen || !root) return;
+
+		const node = findNode(root, path);
+		if (!node) return;
+
+		const gen = ++treeFileGeneration;
+
+		async function loadShallowFiles() {
+			try {
+				let files: MediaFile[];
+				if (node!.dirEntry) {
+					files = await readDirectoryShallowEntry(node!.dirEntry);
+				} else if (node!.dirHandle) {
+					files = await readDirectoryShallowHandle(node!.dirHandle);
+				} else {
+					return;
+				}
+				if (gen !== treeFileGeneration) {
+					files.forEach((f) => URL.revokeObjectURL(f.url));
+					return;
+				}
+				treeFiles.update((old) => {
+					old.forEach((f) => URL.revokeObjectURL(f.url));
+					return files;
+				});
+			} catch (err) {
+				console.error('Shallow read error:', err);
+			}
+		}
+
+		loadShallowFiles();
+	});
 
 	// Re-scan when recursive toggle changes while a directory is loaded
 	let initialMount = true;
@@ -193,6 +279,105 @@
 		return () => window.removeEventListener('keydown', onKeydown, true);
 	});
 
+	// --- Double-Shift detection for drawer toggle ---
+	type ShiftState = 'idle' | 'shift_down' | 'shift_released';
+	let shiftState: ShiftState = 'idle';
+	let shiftTimer: ReturnType<typeof setTimeout> | null = null;
+	let shiftComboUsed = false;
+
+	// --- Tree navigation (only active when drawer is open) ---
+	$effect(() => {
+		function onTreeKeydown(e: KeyboardEvent) {
+			if (dialogOpen) return;
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+			// --- Double-Shift: track Shift keydown regardless of drawer state ---
+			if (e.key === 'Shift') {
+				if (shiftState === 'shift_released' && $treeRoot) {
+					// Second Shift within timeout → double-Shift toggle
+					if (shiftTimer) { clearTimeout(shiftTimer); shiftTimer = null; }
+					shiftState = 'idle';
+					drawerOpen.update((v) => !v);
+					e.preventDefault();
+					return;
+				}
+				shiftState = 'shift_down';
+				shiftComboUsed = false;
+				return;
+			}
+
+			// Everything below only applies when drawer is open
+			if (!$drawerOpen) return;
+
+			// Space: open cursor node (view mode)
+			if (e.key === ' ' && !e.shiftKey) {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				openCursorNode();
+				return;
+			}
+
+			// Mark any Shift combo as used (so Shift keyup won't fire parent move)
+			if (e.shiftKey) {
+				shiftComboUsed = true;
+			}
+
+			// Arrow keys for tree navigation
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+			switch (e.key) {
+				case 'ArrowUp':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					moveCursorUp();
+					break;
+				case 'ArrowDown':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					moveCursorDown();
+					break;
+				case 'ArrowLeft':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					moveCursorToParent();
+					break;
+				case 'ArrowRight':
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					moveCursorToChild();
+					break;
+			}
+		}
+
+		function onTreeKeyup(e: KeyboardEvent) {
+			if (e.key !== 'Shift') return;
+			if (dialogOpen) { shiftState = 'idle'; return; }
+
+			if (shiftState === 'shift_down' && !shiftComboUsed) {
+				// Shift released alone → wait for possible double-Shift
+				shiftState = 'shift_released';
+				shiftTimer = setTimeout(() => {
+					// Timer expired → single Shift (move cursor to parent if drawer open)
+					if ($drawerOpen) {
+						moveCursorToParent();
+					}
+					shiftState = 'idle';
+					shiftTimer = null;
+				}, 300);
+			} else {
+				shiftState = 'idle';
+			}
+		}
+
+		window.addEventListener('keydown', onTreeKeydown, true);
+		window.addEventListener('keyup', onTreeKeyup, true);
+		return () => {
+			window.removeEventListener('keydown', onTreeKeydown, true);
+			window.removeEventListener('keyup', onTreeKeyup, true);
+			if (shiftTimer) clearTimeout(shiftTimer);
+		};
+	});
+
 	function openDialog(file: MediaFile) {
 		selectedMedia = file;
 		dialogOpen = true;
@@ -202,6 +387,7 @@
 		dialogOpen = false;
 		selectedMedia = null;
 		clearMedia();
+		resetTree();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -261,23 +447,26 @@
 />
 
 <DropZone active={dragOver} />
+<DirectoryDrawer open={$drawerOpen} root={$treeRoot} />
 
 {#if $directoryName}
-	<Toolbar dirName={$directoryName} fileCount={$mediaFiles.length} onClear={handleClear} />
-	{#if loading}
-		<div class="flex flex-col items-center justify-center py-32 gap-3">
-			<div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"></div>
-			<p class="text-xs text-[var(--accent)]/60">再スキャン中...</p>
-		</div>
-	{:else if $mediaFiles.length > 0}
-		<MediaGrid files={$mediaFiles} onSelect={openDialog} />
-	{:else}
-		<div class="flex flex-col items-center justify-center py-32 gap-3">
-			<FolderOpen class="h-10 w-10 text-[var(--text-muted)]/40" strokeWidth={1} />
-			<p class="text-sm text-[var(--text-muted)]">メディアファイルが見つかりません</p>
-			<p class="text-xs text-[var(--text-muted)]/60">Recursive [R] を有効にして再スキャンしてください</p>
-		</div>
-	{/if}
+	<div style="margin-left: {$drawerOpen ? '280px' : '0'}; transition: margin-left 0.2s ease">
+		<Toolbar dirName={$directoryName} fileCount={displayFiles.length} onClear={handleClear} treePath={$drawerOpen ? $selectedPath : ''} hasTree={!!$treeRoot} drawerOpen={$drawerOpen} onToggleDrawer={() => drawerOpen.update(v => !v)} />
+		{#if loading}
+			<div class="flex flex-col items-center justify-center py-32 gap-3">
+				<div class="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"></div>
+				<p class="text-xs text-[var(--accent)]/60">再スキャン中...</p>
+			</div>
+		{:else if filteredFiles.length > 0}
+			<MediaGrid files={filteredFiles} onSelect={openDialog} />
+		{:else}
+			<div class="flex flex-col items-center justify-center py-32 gap-3">
+				<FolderOpen class="h-10 w-10 text-[var(--text-muted)]/40" strokeWidth={1} />
+				<p class="text-sm text-[var(--text-muted)]">メディアファイルが見つかりません</p>
+				<p class="text-xs text-[var(--text-muted)]/60">Recursive [R] を有効にして再スキャンしてください</p>
+			</div>
+		{/if}
+	</div>
 {:else}
 	<div class="flex h-screen flex-col items-center justify-center gap-4">
 		{#if loading}
@@ -292,15 +481,15 @@
 				role="button"
 				tabindex={0}
 			>
-				<FolderOpen class="h-14 w-14 text-[var(--accent-cyan)]/40 transition-colors group-hover:text-[var(--accent-cyan)]" strokeWidth={1} />
+				<FolderOpen class="h-14 w-14 text-[var(--accent-cyan)]/60 transition-colors group-hover:text-[var(--accent-cyan)]" strokeWidth={1} />
 				<div class="flex flex-col items-center gap-1">
-					<p class="text-sm text-[var(--accent-cyan)]/60">ディレクトリをドラッグ&ドロップ</p>
-					<div class="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+					<p class="text-sm text-[var(--accent-cyan)]/80">ディレクトリをドラッグ&ドロップ</p>
+					<div class="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
 						<MousePointerClick class="h-3 w-3" />
 						<span>クリックで選択</span>
 					</div>
 				</div>
-				<p class="text-xs text-[var(--text-muted)]/40">画像・動画を一覧表示します</p>
+				<p class="text-xs text-[var(--text-muted)]">画像・動画を一覧表示します</p>
 			</div>
 		{/if}
 	</div>
