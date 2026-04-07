@@ -6,13 +6,11 @@
 	import type { MediaFile } from '$lib/stores/media';
 
 	let {
-		media = $bindable<MediaFile | null>(null),
-		open = $bindable(false),
-		files = []
+		media,
+		open = $bindable(false)
 	}: {
 		media: MediaFile | null;
 		open: boolean;
-		files: MediaFile[];
 	} = $props();
 
 	let converting = $state(false);
@@ -66,17 +64,6 @@
 		/>
 		<Dialog.Content
 			class="fixed inset-0 z-50 flex items-center justify-center p-4 focus-visible:outline-none"
-			onpointerdownoutside={() => (open = false)}
-			onkeydown={(e: KeyboardEvent) => {
-				if (e.key === 'Escape') {
-					e.preventDefault();
-					open = false;
-				}
-				if (e.key === ' ' && media?.type !== 'video') {
-					e.preventDefault();
-					open = false;
-				}
-			}}
 		>
 			{#if media}
 				<div class="relative flex max-h-full max-w-full flex-col">

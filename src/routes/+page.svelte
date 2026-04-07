@@ -148,7 +148,7 @@
 
 	function navigateDialog(direction: 1 | -1) {
 		if (!selectedMedia || filteredFiles.length === 0) return;
-		const idx = filteredFiles.findIndex((f) => f.url === selectedMedia!.url);
+		const idx = filteredFiles.findIndex((f) => f.path === selectedMedia!.path);
 		if (idx === -1) return;
 		const next = idx + direction;
 		if (next < 0 || next >= filteredFiles.length) return;
@@ -160,18 +160,17 @@
 		function onKeydown(e: KeyboardEvent) {
 			if (!dialogOpen) return;
 			if (e.ctrlKey || e.metaKey || e.altKey) return;
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
 			switch (e.key) {
 				case 'ArrowLeft':
 				case 'h':
-				case 'k':
 					e.preventDefault();
 					e.stopImmediatePropagation();
 					navigateDialog(-1);
 					break;
 				case 'ArrowRight':
 				case 'l':
-				case 'j':
 					e.preventDefault();
 					e.stopImmediatePropagation();
 					navigateDialog(1);
@@ -180,6 +179,13 @@
 					e.preventDefault();
 					e.stopImmediatePropagation();
 					dialogOpen = false;
+					break;
+				case ' ':
+					if (selectedMedia?.type !== 'video') {
+						e.preventDefault();
+						e.stopImmediatePropagation();
+						dialogOpen = false;
+					}
 					break;
 			}
 		}
@@ -300,4 +306,4 @@
 	</div>
 {/if}
 
-<MediaDialog bind:media={selectedMedia} bind:open={dialogOpen} files={filteredFiles} />
+<MediaDialog media={selectedMedia} bind:open={dialogOpen} />
