@@ -202,6 +202,11 @@
 		const gen = ++treeFileGeneration;
 
 		async function loadShallowFiles() {
+			// Revoke previous files immediately to limit blob URL accumulation
+			treeFiles.update((old) => {
+				old.forEach((f) => URL.revokeObjectURL(f.url));
+				return [];
+			});
 			try {
 				let files: MediaFile[];
 				if (node!.dirEntry) {
@@ -215,10 +220,7 @@
 					files.forEach((f) => URL.revokeObjectURL(f.url));
 					return;
 				}
-				treeFiles.update((old) => {
-					old.forEach((f) => URL.revokeObjectURL(f.url));
-					return files;
-				});
+				treeFiles.set(files);
 			} catch (err) {
 				console.error('Shallow read error:', err);
 			}
@@ -235,7 +237,8 @@
 			initialMount = false;
 			return;
 		}
-		if (getDirSource()) {
+		// Recursive toggle only applies in flat mode (not tree mode)
+		if (getDirSource() && !$treeRoot) {
 			handleRescan();
 		}
 	});

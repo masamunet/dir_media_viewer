@@ -53,12 +53,11 @@
 		aria-level={depth + 1}
 	>
 		{#if node.children.length > 0}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<span
 				class="tree-chevron"
 				class:tree-chevron--expanded={node.isExpanded}
 				onclick={(e) => handleChevronClick(e, node)}
-				role="button"
-				tabindex="-1"
 			>
 				<ChevronRight size={14} />
 			</span>
