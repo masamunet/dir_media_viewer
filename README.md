@@ -65,6 +65,29 @@ npm run dev
 
 Recursiveモードは毎回OFFで開始する。
 
+## Electron デスクトップアプリ
+
+### 開発
+
+```sh
+# ブラウザで開発（HMR付き）
+npm run dev
+
+# Electronで確認（ビルド済みSPAを読み込み）
+npm run electron:dev
+
+# 開発サーバー接続モード（HMR付き、別ターミナルで npm run dev を先に実行）
+npm run electron:preview
+```
+
+### ビルド（配布用パッケージ生成）
+
+```sh
+npm run electron:build
+```
+
+`release/` ディレクトリにmacOS用 `.dmg` が生成される。
+
 ## 前提条件
 
 - Node.js 18+
@@ -76,3 +99,4 @@ Recursiveモードは毎回OFFで開始する。
 - TailwindCSS v4
 - Bits UI v2
 - Lucide Svelte
+- Electron

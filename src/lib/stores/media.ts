@@ -11,15 +11,34 @@ export interface MediaFile {
 export const mediaFiles = writable<MediaFile[]>([]);
 export const directoryName = writable<string>('');
 
-// Retain directory entry for re-scan on recursive toggle
+// Retain directory references for re-scan on recursive toggle
 let _dirEntry: FileSystemDirectoryEntry | null = null;
+let _dirHandle: FileSystemDirectoryHandle | null = null;
+
+export type DirSource = 'entry' | 'handle' | null;
 
 export function setDirEntry(entry: FileSystemDirectoryEntry | null) {
 	_dirEntry = entry;
+	if (entry) _dirHandle = null;
 }
 
 export function getDirEntry(): FileSystemDirectoryEntry | null {
 	return _dirEntry;
+}
+
+export function setDirHandle(handle: FileSystemDirectoryHandle | null) {
+	_dirHandle = handle;
+	if (handle) _dirEntry = null;
+}
+
+export function getDirHandle(): FileSystemDirectoryHandle | null {
+	return _dirHandle;
+}
+
+export function getDirSource(): DirSource {
+	if (_dirEntry) return 'entry';
+	if (_dirHandle) return 'handle';
+	return null;
 }
 
 export function clearMedia() {
@@ -29,4 +48,5 @@ export function clearMedia() {
 	});
 	directoryName.set('');
 	_dirEntry = null;
+	_dirHandle = null;
 }

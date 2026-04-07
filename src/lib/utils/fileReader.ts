@@ -110,3 +110,68 @@ export async function rescanDirectory(
 ): Promise<MediaFile[]> {
 	return readDirectory(entry, recursive);
 }
+
+// --- File System Access API (showDirectoryPicker) ---
+
+async function readDirectoryHandle(
+	handle: FileSystemDirectoryHandle,
+	recursive: boolean,
+	currentDepth = 0,
+	basePath = ''
+): Promise<MediaFile[]> {
+	const maxDepth = recursive ? 2 : 0;
+	const results: MediaFile[] = [];
+
+	for await (const [name, childHandle] of handle.entries()) {
+		if (name.startsWith('.')) continue;
+
+		const childPath = basePath ? `${basePath}/${name}` : name;
+
+		if (childHandle.kind === 'file') {
+			const type = getMediaType(name);
+			if (type) {
+				const file = await childHandle.getFile();
+				results.push({
+					name,
+					path: childPath,
+					type,
+					file,
+					url: URL.createObjectURL(file)
+				});
+			}
+		} else if (childHandle.kind === 'directory' && currentDepth < maxDepth) {
+			const subResults = await readDirectoryHandle(
+				childHandle,
+				recursive,
+				currentDepth + 1,
+				childPath
+			);
+			results.push(...subResults);
+		}
+	}
+
+	return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function pickDirectory(
+	recursive: boolean
+): Promise<{ files: MediaFile[]; dirName: string; dirHandle: FileSystemDirectoryHandle } | null> {
+	if (!('showDirectoryPicker' in window)) return null;
+
+	try {
+		const dirHandle = await window.showDirectoryPicker();
+		const files = await readDirectoryHandle(dirHandle, recursive);
+		return { files, dirName: dirHandle.name, dirHandle };
+	} catch (e) {
+		// User cancelled the picker
+		if (e instanceof DOMException && e.name === 'AbortError') return null;
+		throw e;
+	}
+}
+
+export async function rescanDirectoryHandle(
+	handle: FileSystemDirectoryHandle,
+	recursive: boolean
+): Promise<MediaFile[]> {
+	return readDirectoryHandle(handle, recursive);
+}

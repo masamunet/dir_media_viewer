@@ -2,6 +2,7 @@
 	import { Dialog } from 'bits-ui';
 	import { X, Download, Maximize, Minimize, Loader2 } from 'lucide-svelte';
 	import { dialogSize } from '$lib/stores/preferences';
+	import { isElectron, convertMediaElectron } from '$lib/electron';
 	import type { MediaFile } from '$lib/stores/media';
 
 	let {
@@ -14,29 +15,38 @@
 
 	let converting = $state(false);
 
+	function triggerDownload(blob: Blob, baseName: string, ext: string) {
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `${baseName}.${ext}`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
 	async function handleConvert() {
 		if (!media) return;
 		converting = true;
 
 		try {
-			const formData = new FormData();
-			formData.append('file', media.file);
-			formData.append('type', media.type);
-
-			const res = await fetch('/api/convert', { method: 'POST', body: formData });
-			if (!res.ok) throw new Error('Conversion failed');
-
-			const blob = await res.blob();
 			const ext = media.type === 'video' ? 'mp4' : 'jpg';
 			const baseName = media.name.replace(/\.[^.]+$/, '');
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `${baseName}.${ext}`;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			let blob: Blob;
+
+			if (isElectron()) {
+				blob = await convertMediaElectron(media.file, media.type);
+			} else {
+				const formData = new FormData();
+				formData.append('file', media.file);
+				formData.append('type', media.type);
+				const res = await fetch('/api/convert', { method: 'POST', body: formData });
+				if (!res.ok) throw new Error('Conversion failed');
+				blob = await res.blob();
+			}
+
+			triggerDownload(blob, baseName, ext);
 		} catch (e) {
 			console.error('Convert error:', e);
 		} finally {

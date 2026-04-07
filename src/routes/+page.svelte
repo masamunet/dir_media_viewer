@@ -1,12 +1,17 @@
 <script lang="ts">
-	import { FolderOpen } from 'lucide-svelte';
+	import { FolderOpen, MousePointerClick } from 'lucide-svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import MediaGrid from '$lib/components/MediaGrid.svelte';
 	import MediaDialog from '$lib/components/MediaDialog.svelte';
-	import { mediaFiles, directoryName, clearMedia, setDirEntry, getDirEntry, type MediaFile } from '$lib/stores/media';
+	import {
+		mediaFiles, directoryName, clearMedia,
+		setDirEntry, getDirEntry,
+		setDirHandle, getDirHandle, getDirSource,
+		type MediaFile
+	} from '$lib/stores/media';
 	import { recursive, mediaFilter, gridSize } from '$lib/stores/preferences';
-	import { processDropEvent, rescanDirectory } from '$lib/utils/fileReader';
+	import { processDropEvent, rescanDirectory, pickDirectory, rescanDirectoryHandle } from '$lib/utils/fileReader';
 
 	let dragOver = $state(false);
 	let loading = $state(false);
@@ -64,9 +69,33 @@
 		}
 	}
 
+	async function handlePickDirectory() {
+		const gen = ++scanGeneration;
+		loading = true;
+		dialogOpen = false;
+		selectedMedia = null;
+
+		try {
+			clearMedia();
+			const result = await pickDirectory($recursive);
+			if (!result || gen !== scanGeneration) {
+				result?.files.forEach((f) => URL.revokeObjectURL(f.url));
+				if (gen === scanGeneration) loading = false;
+				return;
+			}
+			mediaFiles.set(result.files);
+			directoryName.set(result.dirName);
+			setDirHandle(result.dirHandle);
+		} catch (err) {
+			console.error('Pick error:', err);
+		} finally {
+			if (gen === scanGeneration) loading = false;
+		}
+	}
+
 	async function handleRescan() {
-		const entry = getDirEntry();
-		if (!entry) return;
+		const source = getDirSource();
+		if (!source) return;
 
 		const gen = ++scanGeneration;
 		loading = true;
@@ -78,7 +107,14 @@
 				files.forEach((f) => URL.revokeObjectURL(f.url));
 				return [];
 			});
-			const files = await rescanDirectory(entry, $recursive);
+
+			let files: MediaFile[];
+			if (source === 'entry') {
+				files = await rescanDirectory(getDirEntry()!, $recursive);
+			} else {
+				files = await rescanDirectoryHandle(getDirHandle()!, $recursive);
+			}
+
 			if (gen !== scanGeneration) {
 				files.forEach((f) => URL.revokeObjectURL(f.url));
 				return;
@@ -99,7 +135,7 @@
 			initialMount = false;
 			return;
 		}
-		if (getDirEntry()) {
+		if (getDirSource()) {
 			handleRescan();
 		}
 	});
@@ -195,10 +231,23 @@
 			<div class="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"></div>
 			<p class="text-sm text-[var(--accent)]/60">読み込み中...</p>
 		{:else}
-			<div class="flex flex-col items-center gap-3">
-				<FolderOpen class="h-12 w-12 text-[var(--accent-cyan)]/40" strokeWidth={1} />
-				<p class="text-sm text-[var(--accent-cyan)]/60">ディレクトリをドラッグ&ドロップ</p>
-				<p class="text-xs text-[var(--text-muted)]">画像・動画を一覧表示します</p>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="flex flex-col items-center gap-5 cursor-pointer select-none"
+				onclick={handlePickDirectory}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handlePickDirectory(); }}
+				role="button"
+				tabindex={0}
+			>
+				<FolderOpen class="h-14 w-14 text-[var(--accent-cyan)]/40 transition-colors group-hover:text-[var(--accent-cyan)]" strokeWidth={1} />
+				<div class="flex flex-col items-center gap-1">
+					<p class="text-sm text-[var(--accent-cyan)]/60">ディレクトリをドラッグ&ドロップ</p>
+					<div class="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+						<MousePointerClick class="h-3 w-3" />
+						<span>クリックで選択</span>
+					</div>
+				</div>
+				<p class="text-xs text-[var(--text-muted)]/40">画像・動画を一覧表示します</p>
 			</div>
 		{/if}
 	</div>
