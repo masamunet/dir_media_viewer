@@ -15,6 +15,13 @@
 
 	let { root }: Props = $props();
 
+	// Auto-scroll cursor into view
+	$effect(() => {
+		const path = $cursorPath;
+		const el = document.querySelector(`[data-path="${CSS.escape(path)}"]`);
+		el?.scrollIntoView({ block: 'nearest' });
+	});
+
 	function handleNodeClick(node: TreeNode) {
 		cursorPath.set(node.path);
 		openNode(node.path);
@@ -43,6 +50,7 @@
 		role="treeitem"
 		aria-expanded={node.children.length > 0 ? node.isExpanded : undefined}
 		aria-current={isCursor ? 'true' : undefined}
+		aria-level={depth + 1}
 	>
 		{#if node.children.length > 0}
 			<span

@@ -45,7 +45,7 @@
 		<span class="truncate text-sm font-medium text-[var(--accent-cyan)]">{dirName}</span>
 		{#if treePath}
 			<span class="shrink-0 text-xs text-[var(--text-muted)]">/</span>
-			<span class="truncate text-xs text-[var(--text-secondary)]">{treePath || '.'}</span>
+			<span class="truncate text-xs text-[var(--text-secondary)]">{treePath}</span>
 		{/if}
 		<span class="shrink-0 text-xs text-[var(--text-muted)]">{fileCount}</span>
 	</div>

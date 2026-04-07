@@ -19,7 +19,7 @@
 	} from '$lib/utils/fileReader';
 	import {
 		drawerOpen, treeRoot, cursorPath, selectedPath, treeFiles,
-		findNode, resetTree,
+		findNode, resetTree, collapseNode,
 		moveCursorUp, moveCursorDown, moveCursorToParent, moveCursorToChild, openNode
 	} from '$lib/stores/directoryTree';
 
@@ -79,12 +79,15 @@
 				files.forEach((f) => URL.revokeObjectURL(f.url));
 				return;
 			}
-			mediaFiles.set(files);
 			directoryName.set(dirName);
 			setDirEntry(dirEntry);
 
 			// Build directory tree and open drawer
 			if (dirEntry) {
+				// Tree mode: revoke flat mediaFiles (not displayed in tree mode)
+				files.forEach((f) => URL.revokeObjectURL(f.url));
+				mediaFiles.set([]);
+
 				const tree = await scanDirectoryTreeFromEntry(dirEntry);
 				if (gen !== scanGeneration) return;
 				treeRoot.set(tree);
@@ -98,6 +101,8 @@
 					return;
 				}
 				treeFiles.set(shallowFiles);
+			} else {
+				mediaFiles.set(files);
 			}
 		} catch (err) {
 			console.error('Drop error:', err);
@@ -121,9 +126,12 @@
 				if (gen === scanGeneration) loading = false;
 				return;
 			}
-			mediaFiles.set(result.files);
 			directoryName.set(result.dirName);
 			setDirHandle(result.dirHandle);
+
+			// Tree mode: revoke flat mediaFiles (not displayed in tree mode)
+			result.files.forEach((f) => URL.revokeObjectURL(f.url));
+			mediaFiles.set([]);
 
 			// Build directory tree and open drawer
 			const tree = await scanDirectoryTreeFromHandle(result.dirHandle);
@@ -338,11 +346,18 @@
 					e.stopImmediatePropagation();
 					moveCursorDown();
 					break;
-				case 'ArrowLeft':
+				case 'ArrowLeft': {
 					e.preventDefault();
 					e.stopImmediatePropagation();
-					moveCursorToParent();
+					const root = $treeRoot;
+					const node = findNode(root, $cursorPath);
+					if (node && node.isExpanded && node.children.length > 0) {
+						collapseNode(node.path);
+					} else {
+						moveCursorToParent();
+					}
 					break;
+				}
 				case 'ArrowRight':
 					e.preventDefault();
 					e.stopImmediatePropagation();

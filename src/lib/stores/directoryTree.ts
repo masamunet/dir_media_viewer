@@ -83,7 +83,10 @@ export function moveCursorUp() {
 	const current = get(cursorPath);
 	const visible = getVisibleNodes(root);
 	const idx = visible.findIndex((n) => n.path === current);
-	if (idx > 0) {
+	if (idx === -1 && visible.length > 0) {
+		// Cursor not in visible nodes (e.g. parent collapsed) — recover to first
+		cursorPath.set(visible[0].path);
+	} else if (idx > 0) {
 		cursorPath.set(visible[idx - 1].path);
 	}
 }
@@ -93,7 +96,10 @@ export function moveCursorDown() {
 	const current = get(cursorPath);
 	const visible = getVisibleNodes(root);
 	const idx = visible.findIndex((n) => n.path === current);
-	if (idx >= 0 && idx < visible.length - 1) {
+	if (idx === -1 && visible.length > 0) {
+		// Cursor not in visible nodes — recover to first
+		cursorPath.set(visible[0].path);
+	} else if (idx >= 0 && idx < visible.length - 1) {
 		cursorPath.set(visible[idx + 1].path);
 	}
 }
