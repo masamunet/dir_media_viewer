@@ -10,6 +10,12 @@ mac:
   target: dmg
   category: public.app-category.utilities
   icon: build/favicon.png
+  identity: "DAIGAKUDO k.k (HDZ4D9ZP26)"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: entitlements.mac.plist
+  entitlementsInherit: entitlements.mac.plist
+afterSign: scripts/notarize.mjs
 dmg:
   contents:
     - x: 410
