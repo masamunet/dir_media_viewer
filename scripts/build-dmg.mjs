@@ -7,9 +7,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 
 // Verify build artifacts exist
-if (!existsSync(resolve(projectRoot, 'dist-electron', 'main.mjs'))) {
-	console.error('Error: dist-electron/main.mjs not found. Run "npm run build && npm run build:electron" first.');
-	process.exit(1);
+const requiredFiles = ['dist-electron/main.mjs', 'dist-electron/preload.cjs', 'build/index.html'];
+for (const file of requiredFiles) {
+	if (!existsSync(resolve(projectRoot, file))) {
+		console.error(`Error: ${file} not found. Run "npm run build && npm run build:electron" first.`);
+		process.exit(1);
+	}
 }
 
 // Generate build timestamp in YYYYMMDDHHmmss format (local time)
@@ -29,6 +32,9 @@ try {
 		['--config.artifactName', `\${productName}_${timestamp}.\${ext}`],
 		{ stdio: 'inherit', cwd: projectRoot }
 	);
-} catch {
+} catch (err) {
+	if (err.status === null) {
+		console.error('Failed to run electron-builder:', err.message);
+	}
 	process.exit(1);
 }

@@ -19,6 +19,12 @@ try {
 	process.exit(1);
 }
 
+if (!server.httpServer) {
+	console.error('Vite server has no HTTP server (middleware mode?)');
+	await server.close();
+	process.exit(1);
+}
+
 const address = server.httpServer.address();
 if (!address || typeof address === 'string') {
 	console.error('Failed to determine dev server port');
@@ -28,7 +34,8 @@ if (!address || typeof address === 'string') {
 const port = address.port;
 const url = `http://localhost:${port}`;
 
-console.log(`Vite dev server started at ${url}`);
+// Ensure Vite is ready before launching Electron
+server.printUrls();
 
 // Launch Electron with the dev server URL
 const electronPath = resolve(projectRoot, 'node_modules', '.bin', 'electron');
@@ -36,6 +43,12 @@ const electron = spawn(electronPath, ['.'], {
 	cwd: projectRoot,
 	stdio: 'inherit',
 	env: { ...process.env, ELECTRON_DEV_URL: url }
+});
+
+electron.on('error', (err) => {
+	console.error('Failed to launch Electron:', err.message);
+	server.close().catch(() => {});
+	process.exit(1);
 });
 
 let shuttingDown = false;
@@ -46,7 +59,7 @@ async function cleanup() {
 	if (!electron.killed) {
 		electron.kill();
 	}
-	await server.close();
+	await server.close().catch(() => {});
 	process.exit(0);
 }
 
