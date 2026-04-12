@@ -20,7 +20,12 @@ try {
 }
 
 const address = server.httpServer.address();
-const port = typeof address === 'object' && address ? address.port : 5173;
+if (!address || typeof address === 'string') {
+	console.error('Failed to determine dev server port');
+	await server.close();
+	process.exit(1);
+}
+const port = address.port;
 const url = `http://localhost:${port}`;
 
 console.log(`Vite dev server started at ${url}`);
@@ -33,16 +38,18 @@ const electron = spawn(electronPath, ['.'], {
 	env: { ...process.env, ELECTRON_DEV_URL: url }
 });
 
+let shuttingDown = false;
+
 async function cleanup() {
-	electron.kill();
+	if (shuttingDown) return;
+	shuttingDown = true;
+	if (!electron.killed) {
+		electron.kill();
+	}
 	await server.close();
 	process.exit(0);
 }
 
-electron.on('close', async () => {
-	await server.close();
-	process.exit(0);
-});
-
+electron.on('close', cleanup);
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);

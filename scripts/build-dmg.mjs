@@ -1,9 +1,16 @@
 import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
+
+// Verify build artifacts exist
+if (!existsSync(resolve(projectRoot, 'dist-electron', 'main.mjs'))) {
+	console.error('Error: dist-electron/main.mjs not found. Run "npm run build && npm run build:electron" first.');
+	process.exit(1);
+}
 
 // Generate build timestamp in YYYYMMDDHHmmss format (local time)
 const now = new Date();
@@ -16,8 +23,12 @@ const timestamp = now.getFullYear().toString()
 
 // Run electron-builder with custom artifact name including timestamp
 const electronBuilder = resolve(projectRoot, 'node_modules', '.bin', 'electron-builder');
-execFileSync(
-	electronBuilder,
-	['--config.artifactName', `\${productName}_${timestamp}.\${ext}`],
-	{ stdio: 'inherit', cwd: projectRoot }
-);
+try {
+	execFileSync(
+		electronBuilder,
+		['--config.artifactName', `\${productName}_${timestamp}.\${ext}`],
+		{ stdio: 'inherit', cwd: projectRoot }
+	);
+} catch {
+	process.exit(1);
+}
