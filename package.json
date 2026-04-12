@@ -9,8 +9,8 @@
 		"build": "vite build",
 		"build:electron": "node scripts/build-electron.mjs",
 		"electron:dev": "npm run build && npm run build:electron && electron .",
-		"electron:preview": "npm run build && npm run build:electron && ELECTRON_DEV_URL=http://localhost:5173 electron .",
-		"electron:build": "npm run build && npm run build:electron && electron-builder",
+		"electron:preview": "npm run build:electron && node scripts/electron-dev.mjs",
+		"electron:build": "npm run build && npm run build:electron && node scripts/build-dmg.mjs",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
