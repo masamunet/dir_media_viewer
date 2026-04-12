@@ -11,6 +11,7 @@ let server;
 try {
 	server = await createServer({
 		root: projectRoot,
+		configFile: resolve(projectRoot, 'vite.config.ts'),
 		server: { port: 0, strictPort: false }
 	});
 	await server.listen();

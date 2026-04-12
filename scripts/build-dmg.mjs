@@ -33,8 +33,10 @@ try {
 		{ stdio: 'inherit', cwd: projectRoot }
 	);
 } catch (err) {
-	if (err.status === null) {
+	if (err.status !== null) {
+		console.error(`electron-builder exited with code ${err.status}`);
+	} else {
 		console.error('Failed to run electron-builder:', err.message);
 	}
-	process.exit(1);
+	process.exit(err.status ?? 1);
 }
