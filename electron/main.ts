@@ -129,6 +129,10 @@ function getStaticServerPort(): Promise<number> {
 		server.listen(0, '127.0.0.1', () => {
 			const addr = server.address();
 			if (typeof addr !== 'object' || !addr) {
+				settled = true;
+				server.close();
+				staticServerInstance = null;
+				staticServerPromise = null;
 				reject(new Error('Failed to determine server port'));
 				return;
 			}

@@ -27,6 +27,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const baseName = file.name.replace(/\.[^.]+$/, '') || 'download';
 		const safeFallback = sanitizeFilename(baseName);
+		const escapedFallback = safeFallback.replace(/["\\]/g, '\\$&');
 		// RFC 5987 attr-char excludes * ( ) ' — encodeURIComponent leaves these unencoded
 		const encoded = encodeURIComponent(`${baseName}.${result.ext}`)
 			.replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
@@ -34,7 +35,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return new Response(result.buffer, {
 			headers: {
 				'Content-Type': result.mimeType,
-				'Content-Disposition': `attachment; filename="${safeFallback}.${result.ext}"; filename*=UTF-8''${encoded}`,
+				'Content-Disposition': `attachment; filename="${escapedFallback}.${result.ext}"; filename*=UTF-8''${encoded}`,
 			}
 		});
 	} catch (e) {
