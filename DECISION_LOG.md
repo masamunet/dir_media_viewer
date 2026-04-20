@@ -24,6 +24,14 @@
 
 **How to apply:** If routing logic changes to allow extension-less paths through the asset branch, re-evaluate whether `filePath === BUILD_DIR` should be added to the guard or handled as a 403.
 
+## `Content-Disposition`: `filename` and `filename*` intentionally differ
+
+**Decision:** Keep `filename` using `safeFallback` (sanitized, ASCII) and `filename*` using raw `baseName` (percent-encoded via `encodeURIComponent` + RFC 5987 extras).
+
+**Why:** RFC 6266 §4.3 explicitly recommends that `filename` be a legacy ASCII fallback and `filename*` carry the original name encoded as UTF-8. The divergence is intentional and standard. `encodeURIComponent` safely encodes all unsafe characters (`<`, `>`, `;`, newlines, etc.) in `baseName`, and the subsequent `.replace(/['()*]/g, ...)` covers the remaining RFC 5987 `attr-char` gaps. Using `safeFallback` for both would unnecessarily mangle non-ASCII filenames in modern browsers.
+
+**How to apply:** Do not unify `filename` and `filename*` to the same value. The RFC-recommended pattern of sanitized fallback + encoded original is correct.
+
 ## `convertMedia`: no content-type validation of the buffer against `mediaType`
 
 **Decision:** Accept any buffer for a given `mediaType` without sniffing the content.
