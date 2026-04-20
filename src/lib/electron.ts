@@ -19,6 +19,9 @@ export async function convertMediaElectron(
 	file: File,
 	mediaType: string
 ): Promise<Blob> {
+	if (mediaType !== 'image' && mediaType !== 'video') {
+		throw new Error('Invalid media type');
+	}
 	const api = window.electronAPI;
 	if (!api) throw new Error('Electron API not available');
 

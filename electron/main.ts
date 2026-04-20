@@ -46,8 +46,16 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: 
 	}
 });
 
-// Simple static file server for production build
-function startStaticServer(): Promise<number> {
+// Simple static file server for production build.
+// Lazily initialised on first call and reused across window re-creations
+// (e.g. repeated macOS Dock activate events) to avoid leaking bound sockets.
+let staticServerPort: number | null = null;
+
+function getStaticServerPort(): Promise<number> {
+	if (staticServerPort !== null) {
+		return Promise.resolve(staticServerPort);
+	}
+
 	return new Promise((resolve, reject) => {
 		const server = createServer(async (req, res) => {
 			try {
@@ -80,6 +88,8 @@ function startStaticServer(): Promise<number> {
 					return;
 				}
 
+				// Fallback: unknown assets that don't exist on disk serve index.html.
+				// This is safe — index.html is always inside BUILD_DIR.
 				if (!existsSync(filePath)) {
 					filePath = join(BUILD_DIR, 'index.html');
 				}
@@ -107,8 +117,12 @@ function startStaticServer(): Promise<number> {
 
 		server.listen(0, '127.0.0.1', () => {
 			const addr = server.address();
-			const port = typeof addr === 'object' && addr ? addr.port : 0;
-			resolve(port);
+			if (typeof addr !== 'object' || !addr) {
+				reject(new Error('Failed to determine server port'));
+				return;
+			}
+			staticServerPort = addr.port;
+			resolve(addr.port);
 		});
 	});
 }
@@ -119,7 +133,7 @@ async function createWindow() {
 	if (DEV_SERVER_URL) {
 		url = DEV_SERVER_URL;
 	} else {
-		const port = await startStaticServer();
+		const port = await getStaticServerPort();
 		url = `http://127.0.0.1:${port}`;
 	}
 

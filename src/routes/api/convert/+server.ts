@@ -4,12 +4,14 @@ import { MAX_FILE_SIZE, sanitizeFilename, convertMedia, isMediaType } from '$lib
 
 export const POST: RequestHandler = async ({ request }) => {
 	const formData = await request.formData();
-	const file = formData.get('file') as File | null;
+	const rawFile = formData.get('file');
 	const type = formData.get('type');
 
-	if (!file || !type) {
+	if (!(rawFile instanceof File) || !type) {
 		return json({ error: 'Missing file or type' }, { status: 400 });
 	}
+
+	const file = rawFile;
 
 	if (!isMediaType(type)) {
 		return json({ error: 'Invalid type' }, { status: 400 });
