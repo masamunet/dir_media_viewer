@@ -56,11 +56,47 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileNam
 	try {
 		await writeFile(inputPath, buffer);
 
-		const args = isVideo
-			? ['-i', inputPath, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-map_metadata', '-1', '-movflags', '+faststart', '-y', outputPath]
-			: ['-i', inputPath, '-q:v', '2', '-map_metadata', '-1', '-y', outputPath];
+		if (isVideo) {
+			await runFfmpeg([
+				'-i', inputPath,
+				'-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+				'-c:a', 'aac', '-b:a', '128k',
+				'-map_metadata', '-1',
+				'-map_metadata:s:v', '-1',
+				'-map_metadata:s:a', '-1',
+				'-map_chapters', '-1',
+				'-fflags', '+bitexact',
+				'-flags:v', '+bitexact',
+				'-flags:a', '+bitexact',
+				'-metadata:s:v:0', 'encoder=',
+				'-metadata:s:a:0', 'encoder=',
+				'-movflags', '+faststart',
+				'-y', outputPath
+			]);
+		} else {
+			// Two-stage pipeline: decode to raw PPM (no metadata/ICC/side data)
+			// then re-encode to JPEG. Single-pass ffmpeg preserves ICC via side data
+			// even with -map_metadata -1, so an intermediate raw format is required
+			// to guarantee all extraneous data is dropped.
+			const interPath = join(dir, 'inter.ppm');
+			await runFfmpeg([
+				'-i', inputPath,
+				'-frames:v', '1',
+				'-vcodec', 'ppm',
+				'-f', 'image2',
+				'-y', interPath
+			]);
+			await runFfmpeg([
+				'-i', interPath,
+				'-q:v', '2',
+				'-map_metadata', '-1',
+				'-fflags', '+bitexact',
+				'-flags:v', '+bitexact',
+				'-bitexact',
+				'-y', outputPath
+			]);
+		}
 
-		await runFfmpeg(args);
 		const output = await readFile(outputPath);
 
 		return {
