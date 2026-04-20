@@ -86,7 +86,7 @@ function getStaticServerPort(): Promise<number> {
 				// Prevent path traversal: resolved path must remain inside BUILD_DIR.
 				// Use path.sep so the check is correct on both POSIX ('/') and Windows ('\').
 				const buildDirWithSep = BUILD_DIR.endsWith(sep) ? BUILD_DIR : BUILD_DIR + sep;
-				if (!filePath.startsWith(buildDirWithSep) && filePath !== BUILD_DIR) {
+				if (!filePath.startsWith(buildDirWithSep)) {
 					res.writeHead(403);
 					res.end('Forbidden');
 					return;
@@ -118,6 +118,7 @@ function getStaticServerPort(): Promise<number> {
 
 		server.on('error', (err) => {
 			console.error('Static file server error:', err);
+			staticServerInstance = null;
 			staticServerPromise = null;
 			reject(err);
 		});

@@ -18,7 +18,7 @@ export function sanitizeFilename(name: string): string {
 
 export function runFfmpeg(args: string[]): Promise<void> {
 	return new Promise((resolve, reject) => {
-		execFile('ffmpeg', args, { timeout: 120000 }, (err, _stdout, stderr) => {
+		execFile('ffmpeg', args, { timeout: 120000, killSignal: 'SIGKILL' }, (err, _stdout, stderr) => {
 			if (err) reject(new Error(`${err.message}${stderr ? `\nffmpeg stderr: ${stderr.slice(-500)}` : ''}`));
 			else resolve();
 		});
