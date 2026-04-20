@@ -16,6 +16,16 @@
 
 **How to apply:** Do not change this line without verifying the ECMAScript spec still holds in the target Node.js version. The comment in the source cites the spec section for future reference.
 
+**Common false positive**: Reviewers have repeatedly confused `new Uint8Array(output).buffer` (which copies, per the constructor path) with `output.buffer` (which would expose the pool). The code uses the constructor form, not the direct property access. They are not equivalent.
+
+## `encodeURIComponent` safely encodes control characters in `filename*`
+
+**Decision:** No additional control-character filtering before building `encoded` in `+server.ts`.
+
+**Why:** `encodeURIComponent` encodes all characters except `A–Z a–z 0–9 - _ . ! ~ * ' ( )`. Control characters (0x00–0x1F) are not in that exception list and ARE encoded as `%00`–`%1F`. There is no HTTP header injection vector. The additional `.replace(/['()*]/g, ...)` covers the remaining RFC 5987 `attr-char` gaps (`*`, `(`, `)`, `'`). No further encoding is needed.
+
+**How to apply:** Do not add a separate control-character strip before `encodeURIComponent` — it would be redundant.
+
 ## Path-traversal guard: `BUILD_DIR` itself never appears as `filePath`
 
 **Decision:** The traversal guard uses only `filePath.startsWith(buildDirWithSep)` without an additional `|| filePath === BUILD_DIR` exception.
