@@ -118,6 +118,7 @@ function getStaticServerPort(): Promise<number> {
 
 		server.on('error', (err) => {
 			console.error('Static file server error:', err);
+			staticServerPromise = null;
 			reject(err);
 		});
 
