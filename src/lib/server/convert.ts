@@ -88,9 +88,9 @@ export async function convertMedia(inputBuffer: Buffer, mediaType: MediaType): P
 		}
 
 		const output = await readFile(outputPath);
-		// Per ECMAScript §23.2.5.1, constructing TypedArray(typedArray) always copies data
-		// into a new ArrayBuffer regardless of the source's byteOffset or backing store type
-		// (pooled ArrayBuffer or SharedArrayBuffer). This guarantees a plain, isolated copy.
+		// new Uint8Array(typedArray) — the constructor form, not the .buffer accessor —
+		// allocates a fresh ArrayBuffer of output.byteLength bytes and copies data into it
+		// (ECMAScript §23.2.5.1). No pool aliasing regardless of source backing store.
 		const buffer = new Uint8Array(output).buffer;
 
 		return {
