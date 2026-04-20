@@ -4,7 +4,7 @@ import { join, resolve as resolvePath } from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { existsSync } from 'fs';
-import { MAX_FILE_SIZE, sanitizeFilename, convertMedia } from '../src/lib/server/convert.js';
+import { MAX_FILE_SIZE, convertMedia } from '../src/lib/server/convert.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || '';
@@ -36,7 +36,7 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileNam
 	}
 
 	try {
-		return await convertMedia(buffer, mediaType);
+		return await convertMedia(buffer, mediaType as 'video' | 'image');
 	} catch (e) {
 		console.error('convert-media IPC error:', e);
 		throw e;
@@ -78,8 +78,10 @@ function startStaticServer(): Promise<number> {
 				filePath = join(BUILD_DIR, 'index.html');
 			}
 
-			const fileExt = '.' + filePath.split('.').pop();
-			const contentType = MIME_TYPES[fileExt] || 'application/octet-stream';
+			// After any fallback to index.html, derive the served extension from
+			// the actual file path rather than re-parsing to avoid the dual-derivation
+			const servedExt = filePath.endsWith('index.html') ? '.html' : ext;
+			const contentType = MIME_TYPES[servedExt] || 'application/octet-stream';
 
 			try {
 				const data = await readFile(filePath);
@@ -89,6 +91,11 @@ function startStaticServer(): Promise<number> {
 				res.writeHead(404);
 				res.end('Not Found');
 			}
+		});
+
+		server.on('error', (err) => {
+			console.error('Static file server error:', err);
+			resolve(0);
 		});
 
 		server.listen(0, '127.0.0.1', () => {

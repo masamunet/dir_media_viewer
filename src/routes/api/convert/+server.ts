@@ -21,11 +21,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	try {
 		const inputBuffer = Buffer.from(await file.arrayBuffer());
-		const result = await convertMedia(inputBuffer, type);
+		const result = await convertMedia(inputBuffer, type as 'video' | 'image');
 
 		const baseName = file.name.replace(/\.[^.]+$/, '') || 'download';
 		const safeFallback = sanitizeFilename(baseName);
-		const encoded = encodeURIComponent(`${baseName}.${result.ext}`);
+		// RFC 5987 ext-value: encodeURIComponent covers most chars, but single-quote
+		// must also be percent-encoded as it delimits the charset prefix in filename*
+		const encoded = encodeURIComponent(`${baseName}.${result.ext}`).replace(/'/g, '%27');
 
 		return new Response(result.buffer, {
 			headers: {
