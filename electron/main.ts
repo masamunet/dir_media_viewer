@@ -1,16 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { execFile } from 'child_process';
-import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { readFile } from 'fs/promises';
+import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
-import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { createServer, type Server } from 'http';
+import { existsSync } from 'fs';
+import { MAX_FILE_SIZE } from '../src/lib/constants.js';
+import { convertMedia, isMediaType } from '../src/lib/server/convert.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || '';
-const BUILD_DIR = join(__dirname, '..', 'build');
-const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const BUILD_DIR = resolvePath(join(__dirname, '..', 'build'));
 
 const MIME_TYPES: Record<string, string> = {
 	'.html': 'text/html',
@@ -26,92 +25,125 @@ const MIME_TYPES: Record<string, string> = {
 	'.ttf': 'font/ttf'
 };
 
-function sanitizeFilename(name: string): string {
-	return name.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-function runFfmpeg(args: string[]): Promise<void> {
-	return new Promise((resolve, reject) => {
-		execFile('ffmpeg', args, { timeout: 120000 }, (err, _stdout, stderr) => {
-			if (err) reject(new Error(stderr || err.message));
-			else resolve();
-		});
-	});
-}
-
 // IPC: convert media file (strip metadata, re-encode)
-ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileName: string, mediaType: string) => {
-	const buffer = Buffer.from(arrayBuffer);
+ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: string) => {
+	if (!(arrayBuffer instanceof ArrayBuffer)) {
+		throw new Error('Invalid payload: expected ArrayBuffer');
+	}
+	if (!isMediaType(mediaType)) {
+		throw new Error('Invalid media type');
+	}
 
+	const buffer = Buffer.from(arrayBuffer);
 	if (buffer.length > MAX_FILE_SIZE) {
 		throw new Error('File too large');
 	}
 
-	const dir = await mkdtemp(join(tmpdir(), 'dmv-'));
-	const safeName = sanitizeFilename(fileName);
-	const inputPath = join(dir, `input_${safeName}`);
-	const isVideo = mediaType === 'video';
-	const outputPath = join(dir, isVideo ? 'output.mp4' : 'output.jpg');
-
 	try {
-		await writeFile(inputPath, buffer);
-
-		const args = isVideo
-			? ['-i', inputPath, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-map_metadata', '-1', '-movflags', '+faststart', '-y', outputPath]
-			: ['-i', inputPath, '-q:v', '2', '-map_metadata', '-1', '-y', outputPath];
-
-		await runFfmpeg(args);
-		const output = await readFile(outputPath);
-
-		return {
-			buffer: output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength),
-			ext: isVideo ? 'mp4' : 'jpg',
-			mimeType: isVideo ? 'video/mp4' : 'image/jpeg'
-		};
-	} finally {
-		await rm(dir, { recursive: true }).catch(() => {});
+		return await convertMedia(buffer, mediaType);
+	} catch (e) {
+		console.error('convert-media IPC error:', e);
+		throw e;
 	}
 });
 
-// Simple static file server for production build
-function startStaticServer(): Promise<number> {
-	return new Promise((resolve) => {
-		const server = createServer((req, res) => {
-			let pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+// Simple static file server for production build.
+// Lazily initialised on first call and reused across window re-creations
+// (e.g. repeated macOS Dock activate events) to avoid leaking bound sockets.
+// The in-flight promise is cached so concurrent callers wait on the same server,
+// and the server reference is stored for graceful shutdown on app quit.
+let staticServerPromise: Promise<number> | null = null;
+let staticServerInstance: Server | null = null;
 
-			// Check if this looks like a file request (has extension in last segment)
-			const lastSegment = pathname.split('/').pop() || '';
-			const hasExtension = lastSegment.includes('.');
+function getStaticServerPort(): Promise<number> {
+	if (staticServerPromise !== null) {
+		return staticServerPromise;
+	}
 
-			let filePath: string;
-			if (hasExtension) {
-				filePath = join(BUILD_DIR, pathname);
+	staticServerPromise = new Promise((resolve, reject) => {
+		let settled = false;
+		const server = createServer(async (req, res) => {
+			try {
+				let pathname: string;
+				try {
+					pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+				} catch {
+					res.writeHead(400);
+					res.end('Bad Request');
+					return;
+				}
+
+				// Only attempt file lookup for known static asset extensions;
+				// everything else is a SPA route → serve index.html
+				const lastSegment = pathname.split('/').pop() || '';
+				const dotIndex = lastSegment.lastIndexOf('.');
+				const ext = dotIndex !== -1 ? lastSegment.slice(dotIndex) : '';
+				const isKnownAsset = ext !== '' && Object.prototype.hasOwnProperty.call(MIME_TYPES, ext);
+
+				let filePath = isKnownAsset
+					? resolvePath(join(BUILD_DIR, pathname))
+					: join(BUILD_DIR, 'index.html');
+
+				// Prevent path traversal: resolved path must remain inside BUILD_DIR.
+				// Use path.sep so the check is correct on both POSIX ('/') and Windows ('\').
+				const buildDirWithSep = BUILD_DIR.endsWith(sep) ? BUILD_DIR : BUILD_DIR + sep;
+				if (!filePath.startsWith(buildDirWithSep)) {
+					res.writeHead(403);
+					res.end('Forbidden');
+					return;
+				}
+
+				// Fallback: unknown assets that don't exist on disk serve index.html.
+				// This is safe — index.html is always inside BUILD_DIR.
 				if (!existsSync(filePath)) {
 					filePath = join(BUILD_DIR, 'index.html');
 				}
-			} else {
-				filePath = join(BUILD_DIR, 'index.html');
-			}
 
-			const ext = '.' + filePath.split('.').pop();
-			const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+				// After any fallback to index.html, derive the served extension from
+				// the actual file path rather than re-parsing to avoid dual derivation
+				const servedExt = filePath.endsWith('index.html') ? '.html' : ext;
+				const contentType = MIME_TYPES[servedExt] || 'application/octet-stream';
 
-			try {
-				const data = readFileSync(filePath);
+				const data = await readFile(filePath);
 				res.writeHead(200, { 'Content-Type': contentType });
 				res.end(data);
 			} catch {
-				res.writeHead(404);
-				res.end('Not Found');
+				if (!res.headersSent) {
+					res.writeHead(500);
+					res.end('Internal Server Error');
+				}
+			}
+		});
+
+		staticServerInstance = server;
+
+		server.on('error', (err) => {
+			console.error('Static file server error:', err);
+			if (!settled) {
+				settled = true;
+				server.close();
+				staticServerInstance = null;
+				staticServerPromise = null;
+				reject(err);
 			}
 		});
 
 		server.listen(0, '127.0.0.1', () => {
 			const addr = server.address();
-			const port = typeof addr === 'object' && addr ? addr.port : 0;
-			resolve(port);
+			if (typeof addr !== 'object' || !addr) {
+				settled = true;
+				server.close();
+				staticServerInstance = null;
+				staticServerPromise = null;
+				reject(new Error('Failed to determine server port'));
+				return;
+			}
+			settled = true;
+			resolve(addr.port);
 		});
 	});
+
+	return staticServerPromise;
 }
 
 async function createWindow() {
@@ -120,7 +152,7 @@ async function createWindow() {
 	if (DEV_SERVER_URL) {
 		url = DEV_SERVER_URL;
 	} else {
-		const port = await startStaticServer();
+		const port = await getStaticServerPort();
 		url = `http://127.0.0.1:${port}`;
 	}
 
@@ -148,11 +180,18 @@ async function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-	app.quit();
+	// On macOS apps conventionally stay active until explicitly quit via Cmd+Q
+	if (process.platform !== 'darwin') {
+		app.quit();
+	}
 });
 
 app.on('activate', () => {
 	if (BrowserWindow.getAllWindows().length === 0) {
 		createWindow();
 	}
+});
+
+app.on('before-quit', () => {
+	staticServerInstance?.close();
 });

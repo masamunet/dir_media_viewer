@@ -1,7 +1,8 @@
+import { MAX_FILE_SIZE } from '$lib/constants';
+
 export interface ElectronAPI {
 	convertMedia: (
 		arrayBuffer: ArrayBuffer,
-		fileName: string,
 		mediaType: string
 	) => Promise<{ buffer: ArrayBuffer; ext: string; mimeType: string }>;
 }
@@ -20,10 +21,19 @@ export async function convertMediaElectron(
 	file: File,
 	mediaType: string
 ): Promise<Blob> {
+	if (typeof window === 'undefined') {
+		throw new Error('convertMediaElectron requires a browser context');
+	}
+	if (mediaType !== 'image' && mediaType !== 'video') {
+		throw new Error('Invalid media type');
+	}
+	if (file.size > MAX_FILE_SIZE) {
+		throw new Error('File too large');
+	}
 	const api = window.electronAPI;
 	if (!api) throw new Error('Electron API not available');
 
 	const arrayBuffer = await file.arrayBuffer();
-	const result = await api.convertMedia(arrayBuffer, file.name, mediaType);
+	const result = await api.convertMedia(arrayBuffer, mediaType);
 	return new Blob([result.buffer], { type: result.mimeType });
 }
