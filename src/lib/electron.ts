@@ -1,3 +1,5 @@
+import { MAX_FILE_SIZE } from '$lib/constants';
+
 export interface ElectronAPI {
 	convertMedia: (
 		arrayBuffer: ArrayBuffer,
@@ -21,6 +23,9 @@ export async function convertMediaElectron(
 ): Promise<Blob> {
 	if (mediaType !== 'image' && mediaType !== 'video') {
 		throw new Error('Invalid media type');
+	}
+	if (file.size > MAX_FILE_SIZE) {
+		throw new Error('File too large');
 	}
 	const api = window.electronAPI;
 	if (!api) throw new Error('Electron API not available');

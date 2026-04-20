@@ -4,7 +4,8 @@ import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { existsSync } from 'fs';
-import { MAX_FILE_SIZE, convertMedia, isMediaType } from '../src/lib/server/convert.js';
+import { MAX_FILE_SIZE } from '../src/lib/constants.js';
+import { convertMedia, isMediaType } from '../src/lib/server/convert.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || '';
@@ -161,7 +162,10 @@ async function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-	app.quit();
+	// On macOS apps conventionally stay active until explicitly quit via Cmd+Q
+	if (process.platform !== 'darwin') {
+		app.quit();
+	}
 });
 
 app.on('activate', () => {

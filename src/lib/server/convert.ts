@@ -2,8 +2,9 @@ import { execFile } from 'child_process';
 import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { MAX_FILE_SIZE } from '../constants.js';
 
-export const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+export { MAX_FILE_SIZE };
 
 export type MediaType = 'image' | 'video';
 
@@ -87,8 +88,9 @@ export async function convertMedia(inputBuffer: Buffer, mediaType: MediaType): P
 		}
 
 		const output = await readFile(outputPath);
-		// new Uint8Array(output) copies the Buffer's bytes into a fresh ArrayBuffer,
-		// avoiding both the pooled-slice issue and potential SharedArrayBuffer from Node's allocator
+		// Per ECMAScript §23.2.5.1, constructing TypedArray(typedArray) always copies data
+		// into a new ArrayBuffer regardless of the source's byteOffset or backing store type
+		// (pooled ArrayBuffer or SharedArrayBuffer). This guarantees a plain, isolated copy.
 		const buffer = new Uint8Array(output).buffer;
 
 		return {
