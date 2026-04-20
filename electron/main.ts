@@ -61,6 +61,7 @@ function getStaticServerPort(): Promise<number> {
 	}
 
 	staticServerPromise = new Promise((resolve, reject) => {
+		let settled = false;
 		const server = createServer(async (req, res) => {
 			try {
 				let pathname: string;
@@ -118,9 +119,11 @@ function getStaticServerPort(): Promise<number> {
 
 		server.on('error', (err) => {
 			console.error('Static file server error:', err);
-			staticServerInstance = null;
-			staticServerPromise = null;
-			reject(err);
+			if (!settled) {
+				staticServerInstance = null;
+				staticServerPromise = null;
+				reject(err);
+			}
 		});
 
 		server.listen(0, '127.0.0.1', () => {
@@ -129,6 +132,7 @@ function getStaticServerPort(): Promise<number> {
 				reject(new Error('Failed to determine server port'));
 				return;
 			}
+			settled = true;
 			resolve(addr.port);
 		});
 	});

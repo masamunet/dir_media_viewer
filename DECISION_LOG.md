@@ -15,3 +15,19 @@
 **Why:** Multiple reviewers questioned whether this copies data when the source `Buffer` is backed by Node's pooled `ArrayBuffer`. ECMAScript §23.2.5.1 specifies that `TypedArray(typedArray)` (i.e., constructing a TypedArray from another TypedArray) always allocates a fresh `ArrayBuffer` and copies elements — regardless of the source's `byteOffset` or backing store type (pooled or otherwise). The resulting `.buffer` is therefore always a correctly-sized, independent copy. The alternative `output.buffer.slice(output.byteOffset, ...)` is equivalent in correctness but adds noise.
 
 **How to apply:** Do not change this line without verifying the ECMAScript spec still holds in the target Node.js version. The comment in the source cites the spec section for future reference.
+
+## Path-traversal guard: `BUILD_DIR` itself never appears as `filePath`
+
+**Decision:** The traversal guard uses only `filePath.startsWith(buildDirWithSep)` without an additional `|| filePath === BUILD_DIR` exception.
+
+**Why:** `filePath` equals `BUILD_DIR` only if `resolvePath(join(BUILD_DIR, pathname))` collapses to the directory itself, which requires `pathname` to be `/` or empty — neither of which has an extension. The routing logic sends all extension-less paths directly to `index.html` before the traversal check, so `filePath === BUILD_DIR` is unreachable in the `isKnownAsset` branch. Adding the exception back would be dead code.
+
+**How to apply:** If routing logic changes to allow extension-less paths through the asset branch, re-evaluate whether `filePath === BUILD_DIR` should be added to the guard or handled as a 403.
+
+## `convertMedia`: no content-type validation of the buffer against `mediaType`
+
+**Decision:** Accept any buffer for a given `mediaType` without sniffing the content.
+
+**Why:** `ffmpeg` detects the actual format via demuxer probing and returns a non-zero exit code if the content is unrecognisable or incompatible with the requested output. The error propagates to the caller normally. Adding a separate magic-byte check before calling ffmpeg would duplicate logic ffmpeg already performs and would reject legitimate edge cases (e.g. HEIC images, which ffmpeg can decode to JPEG via the image pipeline). The `isMediaType` guard ensures only `'image'` or `'video'` are accepted; within each category ffmpeg handles the rest.
+
+**How to apply:** If silent zero-byte outputs are ever observed, add ffmpeg `-v error` probing before the conversion step to surface the error earlier.

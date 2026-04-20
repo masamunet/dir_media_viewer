@@ -27,9 +27,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const baseName = file.name.replace(/\.[^.]+$/, '') || 'download';
 		const safeFallback = sanitizeFilename(baseName);
-		// RFC 5987 ext-value: encodeURIComponent covers most chars, but single-quote
-		// must also be percent-encoded as it delimits the charset prefix in filename*
-		const encoded = encodeURIComponent(`${baseName}.${result.ext}`).replace(/'/g, '%27');
+		// RFC 5987 attr-char excludes * ( ) ' — encodeURIComponent leaves these unencoded
+		const encoded = encodeURIComponent(`${baseName}.${result.ext}`)
+			.replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
 
 		return new Response(result.buffer, {
 			headers: {
