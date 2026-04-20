@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { readFile } from 'fs/promises';
 import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
-import { createServer } from 'http';
+import { createServer, type Server } from 'http';
 import { existsSync } from 'fs';
 import { MAX_FILE_SIZE } from '../src/lib/constants.js';
 import { convertMedia, isMediaType } from '../src/lib/server/convert.js';
@@ -50,14 +50,17 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: 
 // Simple static file server for production build.
 // Lazily initialised on first call and reused across window re-creations
 // (e.g. repeated macOS Dock activate events) to avoid leaking bound sockets.
-let staticServerPort: number | null = null;
+// The in-flight promise is cached so concurrent callers wait on the same server,
+// and the server reference is stored for graceful shutdown on app quit.
+let staticServerPromise: Promise<number> | null = null;
+let staticServerInstance: Server | null = null;
 
 function getStaticServerPort(): Promise<number> {
-	if (staticServerPort !== null) {
-		return Promise.resolve(staticServerPort);
+	if (staticServerPromise !== null) {
+		return staticServerPromise;
 	}
 
-	return new Promise((resolve, reject) => {
+	staticServerPromise = new Promise((resolve, reject) => {
 		const server = createServer(async (req, res) => {
 			try {
 				let pathname: string;
@@ -111,6 +114,8 @@ function getStaticServerPort(): Promise<number> {
 			}
 		});
 
+		staticServerInstance = server;
+
 		server.on('error', (err) => {
 			console.error('Static file server error:', err);
 			reject(err);
@@ -122,10 +127,11 @@ function getStaticServerPort(): Promise<number> {
 				reject(new Error('Failed to determine server port'));
 				return;
 			}
-			staticServerPort = addr.port;
 			resolve(addr.port);
 		});
 	});
+
+	return staticServerPromise;
 }
 
 async function createWindow() {
@@ -172,4 +178,8 @@ app.on('activate', () => {
 	if (BrowserWindow.getAllWindows().length === 0) {
 		createWindow();
 	}
+});
+
+app.on('before-quit', () => {
+	staticServerInstance?.close();
 });

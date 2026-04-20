@@ -7,7 +7,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const rawFile = formData.get('file');
 	const type = formData.get('type');
 
-	if (!(rawFile instanceof File) || !type) {
+	if (!(rawFile instanceof File) || typeof type !== 'string' || !type) {
 		return json({ error: 'Missing file or type' }, { status: 400 });
 	}
 

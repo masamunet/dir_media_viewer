@@ -21,6 +21,9 @@ export async function convertMediaElectron(
 	file: File,
 	mediaType: string
 ): Promise<Blob> {
+	if (typeof window === 'undefined') {
+		throw new Error('convertMediaElectron requires a browser context');
+	}
 	if (mediaType !== 'image' && mediaType !== 'video') {
 		throw new Error('Invalid media type');
 	}
