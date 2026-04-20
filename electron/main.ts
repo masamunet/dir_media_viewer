@@ -1,10 +1,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { readFile } from 'fs/promises';
-import { join, resolve as resolvePath } from 'path';
+import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { existsSync } from 'fs';
-import { MAX_FILE_SIZE, convertMedia } from '../src/lib/server/convert.js';
+import { MAX_FILE_SIZE, convertMedia, isMediaType } from '../src/lib/server/convert.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || '';
@@ -25,8 +25,11 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 // IPC: convert media file (strip metadata, re-encode)
-ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileName: string, mediaType: string) => {
-	if (mediaType !== 'video' && mediaType !== 'image') {
+ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: string) => {
+	if (!(arrayBuffer instanceof ArrayBuffer)) {
+		throw new Error('Invalid payload: expected ArrayBuffer');
+	}
+	if (!isMediaType(mediaType)) {
 		throw new Error('Invalid media type');
 	}
 
@@ -36,7 +39,7 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileNam
 	}
 
 	try {
-		return await convertMedia(buffer, mediaType as 'video' | 'image');
+		return await convertMedia(buffer, mediaType);
 	} catch (e) {
 		console.error('convert-media IPC error:', e);
 		throw e;
@@ -45,57 +48,61 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileNam
 
 // Simple static file server for production build
 function startStaticServer(): Promise<number> {
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		const server = createServer(async (req, res) => {
-			let pathname: string;
 			try {
-				pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
-			} catch {
-				res.writeHead(400);
-				res.end('Bad Request');
-				return;
-			}
+				let pathname: string;
+				try {
+					pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+				} catch {
+					res.writeHead(400);
+					res.end('Bad Request');
+					return;
+				}
 
-			// Only attempt file lookup for known static asset extensions;
-			// everything else is a SPA route → serve index.html
-			const lastSegment = pathname.split('/').pop() || '';
-			const dotIndex = lastSegment.lastIndexOf('.');
-			const ext = dotIndex !== -1 ? lastSegment.slice(dotIndex) : '';
-			const isKnownAsset = ext !== '' && Object.prototype.hasOwnProperty.call(MIME_TYPES, ext);
+				// Only attempt file lookup for known static asset extensions;
+				// everything else is a SPA route → serve index.html
+				const lastSegment = pathname.split('/').pop() || '';
+				const dotIndex = lastSegment.lastIndexOf('.');
+				const ext = dotIndex !== -1 ? lastSegment.slice(dotIndex) : '';
+				const isKnownAsset = ext !== '' && Object.prototype.hasOwnProperty.call(MIME_TYPES, ext);
 
-			let filePath = isKnownAsset
-				? resolvePath(join(BUILD_DIR, pathname))
-				: join(BUILD_DIR, 'index.html');
+				let filePath = isKnownAsset
+					? resolvePath(join(BUILD_DIR, pathname))
+					: join(BUILD_DIR, 'index.html');
 
-			// Prevent path traversal: resolved path must remain inside BUILD_DIR
-			if (!filePath.startsWith(BUILD_DIR + '/') && filePath !== BUILD_DIR) {
-				res.writeHead(403);
-				res.end('Forbidden');
-				return;
-			}
+				// Prevent path traversal: resolved path must remain inside BUILD_DIR.
+				// Use path.sep so the check is correct on both POSIX ('/') and Windows ('\').
+				const buildDirWithSep = BUILD_DIR.endsWith(sep) ? BUILD_DIR : BUILD_DIR + sep;
+				if (!filePath.startsWith(buildDirWithSep) && filePath !== BUILD_DIR) {
+					res.writeHead(403);
+					res.end('Forbidden');
+					return;
+				}
 
-			if (!existsSync(filePath)) {
-				filePath = join(BUILD_DIR, 'index.html');
-			}
+				if (!existsSync(filePath)) {
+					filePath = join(BUILD_DIR, 'index.html');
+				}
 
-			// After any fallback to index.html, derive the served extension from
-			// the actual file path rather than re-parsing to avoid the dual-derivation
-			const servedExt = filePath.endsWith('index.html') ? '.html' : ext;
-			const contentType = MIME_TYPES[servedExt] || 'application/octet-stream';
+				// After any fallback to index.html, derive the served extension from
+				// the actual file path rather than re-parsing to avoid dual derivation
+				const servedExt = filePath.endsWith('index.html') ? '.html' : ext;
+				const contentType = MIME_TYPES[servedExt] || 'application/octet-stream';
 
-			try {
 				const data = await readFile(filePath);
 				res.writeHead(200, { 'Content-Type': contentType });
 				res.end(data);
 			} catch {
-				res.writeHead(404);
-				res.end('Not Found');
+				if (!res.headersSent) {
+					res.writeHead(500);
+					res.end('Internal Server Error');
+				}
 			}
 		});
 
 		server.on('error', (err) => {
 			console.error('Static file server error:', err);
-			resolve(0);
+			reject(err);
 		});
 
 		server.listen(0, '127.0.0.1', () => {

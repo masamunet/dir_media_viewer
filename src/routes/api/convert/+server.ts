@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { MAX_FILE_SIZE, sanitizeFilename, convertMedia } from '$lib/server/convert';
+import { MAX_FILE_SIZE, sanitizeFilename, convertMedia, isMediaType } from '$lib/server/convert';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const formData = await request.formData();
@@ -11,7 +11,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Missing file or type' }, { status: 400 });
 	}
 
-	if (type !== 'video' && type !== 'image') {
+	if (!isMediaType(type)) {
 		return json({ error: 'Invalid type' }, { status: 400 });
 	}
 
@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	try {
 		const inputBuffer = Buffer.from(await file.arrayBuffer());
-		const result = await convertMedia(inputBuffer, type as 'video' | 'image');
+		const result = await convertMedia(inputBuffer, type);
 
 		const baseName = file.name.replace(/\.[^.]+$/, '') || 'download';
 		const safeFallback = sanitizeFilename(baseName);

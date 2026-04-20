@@ -7,6 +7,10 @@ export const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
 export type MediaType = 'image' | 'video';
 
+export function isMediaType(value: unknown): value is MediaType {
+	return value === 'image' || value === 'video';
+}
+
 export function sanitizeFilename(name: string): string {
 	return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+|\.+$/g, '_');
 }
@@ -83,8 +87,9 @@ export async function convertMedia(inputBuffer: Buffer, mediaType: MediaType): P
 		}
 
 		const output = await readFile(outputPath);
-		// Buffer may be a view into a pooled ArrayBuffer; slice to own copy
-		const buffer = output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength) as ArrayBuffer;
+		// new Uint8Array(output) copies the Buffer's bytes into a fresh ArrayBuffer,
+		// avoiding both the pooled-slice issue and potential SharedArrayBuffer from Node's allocator
+		const buffer = new Uint8Array(output).buffer;
 
 		return {
 			buffer,

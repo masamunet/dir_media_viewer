@@ -1,7 +1,6 @@
 export interface ElectronAPI {
 	convertMedia: (
 		arrayBuffer: ArrayBuffer,
-		fileName: string,
 		mediaType: string
 	) => Promise<{ buffer: ArrayBuffer; ext: string; mimeType: string }>;
 }
@@ -24,6 +23,6 @@ export async function convertMediaElectron(
 	if (!api) throw new Error('Electron API not available');
 
 	const arrayBuffer = await file.arrayBuffer();
-	const result = await api.convertMedia(arrayBuffer, file.name, mediaType);
+	const result = await api.convertMedia(arrayBuffer, mediaType);
 	return new Blob([result.buffer], { type: result.mimeType });
 }
