@@ -1,16 +1,14 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { execFile } from 'child_process';
-import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { readFile } from 'fs/promises';
+import { join, resolve as resolvePath } from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
+import { MAX_FILE_SIZE, sanitizeFilename, convertMedia } from '../src/lib/server/convert.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_URL || '';
-const BUILD_DIR = join(__dirname, '..', 'build');
-const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const BUILD_DIR = resolvePath(join(__dirname, '..', 'build'));
 
 const MIME_TYPES: Record<string, string> = {
 	'.html': 'text/html',
@@ -26,114 +24,65 @@ const MIME_TYPES: Record<string, string> = {
 	'.ttf': 'font/ttf'
 };
 
-function sanitizeFilename(name: string): string {
-	return name.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-function runFfmpeg(args: string[]): Promise<void> {
-	return new Promise((resolve, reject) => {
-		execFile('ffmpeg', args, { timeout: 120000 }, (err, _stdout, stderr) => {
-			if (err) reject(new Error(stderr || err.message));
-			else resolve();
-		});
-	});
-}
-
 // IPC: convert media file (strip metadata, re-encode)
 ipcMain.handle('convert-media', async (_event, arrayBuffer: ArrayBuffer, fileName: string, mediaType: string) => {
-	const buffer = Buffer.from(arrayBuffer);
+	if (mediaType !== 'video' && mediaType !== 'image') {
+		throw new Error('Invalid media type');
+	}
 
+	const buffer = Buffer.from(arrayBuffer);
 	if (buffer.length > MAX_FILE_SIZE) {
 		throw new Error('File too large');
 	}
 
-	const dir = await mkdtemp(join(tmpdir(), 'dmv-'));
-	const safeName = sanitizeFilename(fileName);
-	const inputPath = join(dir, `input_${safeName}`);
-	const isVideo = mediaType === 'video';
-	const outputPath = join(dir, isVideo ? 'output.mp4' : 'output.jpg');
-
 	try {
-		await writeFile(inputPath, buffer);
-
-		if (isVideo) {
-			await runFfmpeg([
-				'-i', inputPath,
-				'-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-				'-c:a', 'aac', '-b:a', '128k',
-				'-map_metadata', '-1',
-				'-map_metadata:s:v', '-1',
-				'-map_metadata:s:a', '-1',
-				'-map_chapters', '-1',
-				'-fflags', '+bitexact',
-				'-flags:v', '+bitexact',
-				'-flags:a', '+bitexact',
-				'-metadata:s:v:0', 'encoder=',
-				'-metadata:s:a:0', 'encoder=',
-				'-movflags', '+faststart',
-				'-y', outputPath
-			]);
-		} else {
-			// Two-stage pipeline: decode to raw PPM (no metadata/ICC/side data)
-			// then re-encode to JPEG. Single-pass ffmpeg preserves ICC via side data
-			// even with -map_metadata -1, so an intermediate raw format is required
-			// to guarantee all extraneous data is dropped.
-			const interPath = join(dir, 'inter.ppm');
-			await runFfmpeg([
-				'-i', inputPath,
-				'-frames:v', '1',
-				'-vcodec', 'ppm',
-				'-f', 'image2',
-				'-y', interPath
-			]);
-			await runFfmpeg([
-				'-i', interPath,
-				'-q:v', '2',
-				'-map_metadata', '-1',
-				'-fflags', '+bitexact',
-				'-flags:v', '+bitexact',
-				'-bitexact',
-				'-y', outputPath
-			]);
-		}
-
-		const output = await readFile(outputPath);
-
-		return {
-			buffer: output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength),
-			ext: isVideo ? 'mp4' : 'jpg',
-			mimeType: isVideo ? 'video/mp4' : 'image/jpeg'
-		};
-	} finally {
-		await rm(dir, { recursive: true }).catch(() => {});
+		return await convertMedia(buffer, mediaType);
+	} catch (e) {
+		console.error('convert-media IPC error:', e);
+		throw e;
 	}
 });
 
 // Simple static file server for production build
 function startStaticServer(): Promise<number> {
 	return new Promise((resolve) => {
-		const server = createServer((req, res) => {
-			let pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+		const server = createServer(async (req, res) => {
+			let pathname: string;
+			try {
+				pathname = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+			} catch {
+				res.writeHead(400);
+				res.end('Bad Request');
+				return;
+			}
 
-			// Check if this looks like a file request (has extension in last segment)
+			// Only attempt file lookup for known static asset extensions;
+			// everything else is a SPA route → serve index.html
 			const lastSegment = pathname.split('/').pop() || '';
-			const hasExtension = lastSegment.includes('.');
+			const dotIndex = lastSegment.lastIndexOf('.');
+			const ext = dotIndex !== -1 ? lastSegment.slice(dotIndex) : '';
+			const isKnownAsset = ext !== '' && Object.prototype.hasOwnProperty.call(MIME_TYPES, ext);
 
-			let filePath: string;
-			if (hasExtension) {
-				filePath = join(BUILD_DIR, pathname);
-				if (!existsSync(filePath)) {
-					filePath = join(BUILD_DIR, 'index.html');
-				}
-			} else {
+			let filePath = isKnownAsset
+				? resolvePath(join(BUILD_DIR, pathname))
+				: join(BUILD_DIR, 'index.html');
+
+			// Prevent path traversal: resolved path must remain inside BUILD_DIR
+			if (!filePath.startsWith(BUILD_DIR + '/') && filePath !== BUILD_DIR) {
+				res.writeHead(403);
+				res.end('Forbidden');
+				return;
+			}
+
+			if (!existsSync(filePath)) {
 				filePath = join(BUILD_DIR, 'index.html');
 			}
 
-			const ext = '.' + filePath.split('.').pop();
-			const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+			const fileExt = '.' + filePath.split('.').pop();
+			const contentType = MIME_TYPES[fileExt] || 'application/octet-stream';
 
 			try {
-				const data = readFileSync(filePath);
+				const data = await readFile(filePath);
 				res.writeHead(200, { 'Content-Type': contentType });
 				res.end(data);
 			} catch {
