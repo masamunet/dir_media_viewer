@@ -36,6 +36,9 @@
 			? displayFiles
 			: displayFiles.filter((f) => f.type === $mediaFilter)
 	);
+	const videoOnlyDisplay = $derived(
+		filteredFiles.length > 0 && filteredFiles.every((f) => f.type === 'video')
+	);
 
 	let dragCounter = 0;
 	let scanGeneration = 0;
@@ -244,12 +247,18 @@
 	});
 
 	function navigateDialog(direction: 1 | -1) {
-		if (!selectedMedia || filteredFiles.length === 0) return;
+		if (!selectedMedia || filteredFiles.length === 0) return false;
 		const idx = filteredFiles.findIndex((f) => f.path === selectedMedia!.path);
-		if (idx === -1) return;
+		if (idx === -1) return false;
 		const next = idx + direction;
-		if (next < 0 || next >= filteredFiles.length) return;
+		if (next < 0 || next >= filteredFiles.length) return false;
 		selectedMedia = filteredFiles[next];
+		return true;
+	}
+
+	function handleDialogVideoEnded() {
+		if (!videoOnlyDisplay || selectedMedia?.type !== 'video') return;
+		navigateDialog(1);
 	}
 
 	// ダイアログ表示中のキーボード操作（captureフェーズで確実にキャッチ）
@@ -278,11 +287,9 @@
 					dialogOpen = false;
 					break;
 				case ' ':
-					if (selectedMedia?.type !== 'video') {
-						e.preventDefault();
-						e.stopImmediatePropagation();
-						dialogOpen = false;
-					}
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					dialogOpen = false;
 					break;
 			}
 		}
@@ -523,4 +530,9 @@
 	</div>
 {/if}
 
-<MediaDialog media={selectedMedia} bind:open={dialogOpen} />
+<MediaDialog
+	media={selectedMedia}
+	bind:open={dialogOpen}
+	advanceOnVideoEnd={videoOnlyDisplay}
+	onVideoEnded={handleDialogVideoEnded}
+/>

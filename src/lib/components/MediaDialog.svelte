@@ -7,10 +7,14 @@
 
 	let {
 		media,
-		open = $bindable(false)
+		open = $bindable(false),
+		advanceOnVideoEnd = false,
+		onVideoEnded
 	}: {
 		media: MediaFile | null;
 		open: boolean;
+		advanceOnVideoEnd?: boolean;
+		onVideoEnded?: () => void;
 	} = $props();
 
 	let converting = $state(false);
@@ -52,6 +56,10 @@
 		} finally {
 			converting = false;
 		}
+	}
+
+	function handleVideoEnded() {
+		onVideoEnded?.();
 	}
 </script>
 
@@ -109,7 +117,8 @@
 								: 'rounded-[var(--radius-sm)]'}
 							controls
 							autoplay
-							loop
+							loop={!advanceOnVideoEnd}
+							onended={handleVideoEnded}
 						></video>
 					{:else}
 						<img
