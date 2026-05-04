@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { readFile } from 'fs/promises';
 import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
@@ -54,6 +54,10 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: 
 // and the server reference is stored for graceful shutdown on app quit.
 let staticServerPromise: Promise<number> | null = null;
 let staticServerInstance: Server | null = null;
+
+function getAppIconPath() {
+	return resolvePath(join(__dirname, '..', DEV_SERVER_URL ? 'static' : 'build', 'favicon.png'));
+}
 
 function getStaticServerPort(): Promise<number> {
 	if (staticServerPromise !== null) {
@@ -148,6 +152,7 @@ function getStaticServerPort(): Promise<number> {
 
 async function createWindow() {
 	let url: string;
+	const iconPath = getAppIconPath();
 
 	if (DEV_SERVER_URL) {
 		url = DEV_SERVER_URL;
@@ -163,6 +168,7 @@ async function createWindow() {
 		minHeight: 400,
 		titleBarStyle: 'hiddenInset',
 		backgroundColor: '#06060a',
+		icon: iconPath,
 		webPreferences: {
 			preload: join(__dirname, 'preload.cjs'),
 			contextIsolation: true,
@@ -177,7 +183,12 @@ async function createWindow() {
 	}
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+	if (process.platform === 'darwin') {
+		app.dock.setIcon(nativeImage.createFromPath(getAppIconPath()));
+	}
+	return createWindow();
+});
 
 app.on('window-all-closed', () => {
 	// On macOS apps conventionally stay active until explicitly quit via Cmd+Q

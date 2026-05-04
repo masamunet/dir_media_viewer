@@ -71,11 +71,11 @@
 			onclick={() => (open = false)}
 		/>
 		<Dialog.Content
-			class="fixed inset-0 z-50 flex items-center justify-center p-4 focus-visible:outline-none"
+			class="fixed inset-0 z-50 flex items-center justify-center p-2 focus-visible:outline-none sm:p-4"
 		>
 			{#if media}
-				<div class="relative flex max-h-full max-w-full flex-col">
-					<div class="absolute -top-10 right-0 flex items-center gap-1">
+				<div class="relative flex h-full w-full max-h-full max-w-full flex-col items-center justify-center pt-10">
+					<div class="absolute right-0 top-0 flex items-center gap-1">
 						<button
 							class="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent-cyan)]"
 							onclick={() => dialogSize.update((v) => (v === 'fit' ? 'original' : 'fit'))}
@@ -109,29 +109,31 @@
 						</Dialog.Close>
 					</div>
 
-					{#if media.type === 'video'}
-						<video
-							src={media.url}
-							class={$dialogSize === 'fit'
-								? 'max-h-[85vh] max-w-[90vw] rounded-[var(--radius-sm)]'
-								: 'rounded-[var(--radius-sm)]'}
-							controls
-							autoplay
-							loop={!advanceOnVideoEnd}
-							onended={handleVideoEnded}
-						></video>
-					{:else}
-						<img
-							src={media.url}
-							alt={media.name}
-							class={$dialogSize === 'fit'
-								? 'max-h-[85vh] max-w-[90vw] rounded-[var(--radius-sm)] object-contain'
-								: 'rounded-[var(--radius-sm)]'}
-							draggable="false"
-						/>
-					{/if}
+					<div class="flex min-h-0 w-full flex-1 items-center justify-center">
+						{#if media.type === 'video'}
+							<video
+								src={media.url}
+								class={$dialogSize === 'fit'
+									? 'h-full w-full rounded-[var(--radius-sm)] object-contain'
+									: 'rounded-[var(--radius-sm)]'}
+								controls
+								autoplay
+								loop={!advanceOnVideoEnd}
+								onended={handleVideoEnded}
+							></video>
+						{:else}
+							<img
+								src={media.url}
+								alt={media.name}
+								class={$dialogSize === 'fit'
+									? 'h-full w-full rounded-[var(--radius-sm)] object-contain'
+									: 'rounded-[var(--radius-sm)]'}
+								draggable="false"
+							/>
+						{/if}
+					</div>
 
-					<p class="mt-2 text-center text-xs text-[var(--text-muted)]">{media.path}</p>
+					<p class="mt-2 max-w-full shrink-0 truncate px-2 text-center text-xs text-[var(--text-muted)]">{media.path}</p>
 				</div>
 			{/if}
 		</Dialog.Content>
