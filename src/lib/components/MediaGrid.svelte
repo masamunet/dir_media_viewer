@@ -5,6 +5,9 @@
 	import type { MediaFile } from '$lib/stores/media';
 
 	const BATCH_SIZE = 20;
+	const ASPECT_IMAGE_SAMPLE_SIZE = 12;
+	const ASPECT_VIDEO_SAMPLE_SIZE = 3;
+	const ASPECT_SAMPLE_TIMEOUT_MS = 2500;
 
 	let { files, onSelect }: { files: MediaFile[]; onSelect: (file: MediaFile) => void } = $props();
 
@@ -69,46 +72,72 @@
 
 	async function computeAverageAspect(mediaFiles: MediaFile[]) {
 		const gen = ++aspectGeneration;
-		const samples = mediaFiles.slice(0, 20);
+		const imageSamples = mediaFiles.filter((m) => m.type === 'image').slice(0, ASPECT_IMAGE_SAMPLE_SIZE);
+		const videoSamples = mediaFiles.filter((m) => m.type === 'video').slice(0, ASPECT_VIDEO_SAMPLE_SIZE);
+		const samples = [...imageSamples, ...videoSamples];
 		const ratios: number[] = [];
 
-		await Promise.all(
-			samples.map(
-				(m) =>
-					new Promise<void>((resolve) => {
-						if (m.type === 'image') {
-							const img = new window.Image();
-							img.onload = () => {
-								if (img.naturalHeight > 0) {
-									ratios.push(img.naturalWidth / img.naturalHeight);
-								}
-								img.src = '';
-								resolve();
-							};
-							img.onerror = () => { img.src = ''; resolve(); };
-							img.src = m.url;
-						} else {
-							const video = document.createElement('video');
-							video.onloadedmetadata = () => {
-								if (video.videoHeight > 0) {
-									ratios.push(video.videoWidth / video.videoHeight);
-								}
-								video.src = '';
-								video.load();
-								resolve();
-							};
-							video.onerror = () => { video.src = ''; resolve(); };
-							video.src = m.url;
-						}
-					})
-			)
-		);
+		for (const sample of samples) {
+			if (gen !== aspectGeneration) return;
+			const ratio = sample.type === 'image'
+				? await readImageAspect(sample.url)
+				: await readVideoAspect(sample.url);
+			if (ratio) ratios.push(ratio);
+		}
 
 		if (gen !== aspectGeneration) return;
 
 		if (ratios.length > 0) {
 			averageAspect = ratios.reduce((a, b) => a + b, 0) / ratios.length;
 		}
+	}
+
+	function readImageAspect(url: string) {
+		return new Promise<number | null>((resolve) => {
+			const img = new window.Image();
+			let done = false;
+			const timer = window.setTimeout(() => cleanup(null), ASPECT_SAMPLE_TIMEOUT_MS);
+
+			function cleanup(ratio: number | null) {
+				if (done) return;
+				done = true;
+				window.clearTimeout(timer);
+				img.onload = null;
+				img.onerror = null;
+				img.src = '';
+				resolve(ratio);
+			}
+
+			img.onload = () => cleanup(img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : null);
+			img.onerror = () => cleanup(null);
+			img.src = url;
+		});
+	}
+
+	function readVideoAspect(url: string) {
+		return new Promise<number | null>((resolve) => {
+			const video = document.createElement('video');
+			let done = false;
+			const timer = window.setTimeout(() => cleanup(null), ASPECT_SAMPLE_TIMEOUT_MS);
+
+			function cleanup(ratio: number | null) {
+				if (done) return;
+				done = true;
+				window.clearTimeout(timer);
+				video.onloadedmetadata = null;
+				video.onerror = null;
+				video.removeAttribute('src');
+				video.load();
+				resolve(ratio);
+			}
+
+			video.preload = 'metadata';
+			video.muted = true;
+			video.playsInline = true;
+			video.onloadedmetadata = () => cleanup(video.videoHeight > 0 ? video.videoWidth / video.videoHeight : null);
+			video.onerror = () => cleanup(null);
+			video.src = url;
+		});
 	}
 
 	function getCards(): HTMLButtonElement[] {

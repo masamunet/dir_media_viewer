@@ -17,52 +17,132 @@
 	let el: HTMLButtonElement;
 	let videoEl: HTMLVideoElement | undefined = $state();
 	let visible = $state(false);
+	let nearViewport = $state(false);
 	let inViewport = $state(false);
 	let loaded = $state(false);
+	let pointerPreview = $state(false);
+	let focusPreview = $state(false);
+	let pageVisible = $state(true);
+	let videoSrc = $state<string | undefined>();
+
+	const previewActive = $derived(pointerPreview || focusPreview);
+
+	function isElementInViewport(target: HTMLElement) {
+		const rect = target.getBoundingClientRect();
+		return rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+	}
 
 	$effect(() => {
 		if (!el) return;
-		const observer = new IntersectionObserver(
+		const loadObserver = new IntersectionObserver(
 			([entry]) => {
-				inViewport = entry.isIntersecting;
+				nearViewport = entry.isIntersecting;
 				if (entry.isIntersecting && !visible) {
 					visible = true;
 				}
 			},
-			{ threshold: 0.08, rootMargin: '40px' }
+			{ threshold: 0.01, rootMargin: '260px' }
 		);
-		observer.observe(el);
-		return () => observer.disconnect();
+		const viewportObserver = new IntersectionObserver(
+			([entry]) => {
+				inViewport = entry.isIntersecting || isElementInViewport(el);
+			},
+			{ threshold: 0.08 }
+		);
+		loadObserver.observe(el);
+		viewportObserver.observe(el);
+		return () => {
+			loadObserver.disconnect();
+			viewportObserver.disconnect();
+		};
 	});
 
-	// Play/pause video based on viewport visibility
 	$effect(() => {
-		if (!videoEl) return;
-		if (inViewport) {
-			const el = videoEl;
-			const playPromise = el.play().catch(() => {});
-			return () => { playPromise.then(() => el?.pause()).catch(() => {}); };
-		} else {
-			videoEl.pause();
+		if (media.type !== 'video') return;
+		let unloadTimer: ReturnType<typeof setTimeout> | undefined;
+
+		if (nearViewport) {
+			videoSrc = media.url;
+			return;
 		}
+
+		unloadTimer = setTimeout(() => {
+			videoSrc = undefined;
+			loaded = false;
+			if (!videoEl) return;
+			videoEl.pause();
+			videoEl.removeAttribute('src');
+			videoEl.load();
+		}, 1200);
+
+		return () => {
+			if (unloadTimer) clearTimeout(unloadTimer);
+		};
+	});
+
+	$effect(() => {
+		if (media.type !== 'video') return;
+		function updatePageVisible() {
+			pageVisible = !document.hidden;
+		}
+		updatePageVisible();
+		document.addEventListener('visibilitychange', updatePageVisible);
+		return () => document.removeEventListener('visibilitychange', updatePageVisible);
+	});
+
+	$effect(() => {
+		if (!videoEl || media.type !== 'video') return;
+		if (videoSrc && pageVisible && inViewport && previewActive) {
+			const target = videoEl;
+			const playPromise = target.play().catch(() => {});
+			return () => {
+				playPromise.then(() => target.pause()).catch(() => {});
+			};
+		}
+
+		videoEl.pause();
+	});
+
+	$effect(() => {
+		return () => {
+			if (!videoEl) return;
+			videoEl.pause();
+			videoEl.removeAttribute('src');
+			videoEl.load();
+		};
 	});
 
 	function handleFocus() {
+		focusPreview = true;
 		const grid = el?.parentElement;
 		if (!grid) return;
 		grid.querySelectorAll<HTMLButtonElement>(':scope > button').forEach((btn) => {
 			btn.tabIndex = 0;
 		});
 	}
+
+	function handleBlur() {
+		focusPreview = false;
+	}
+
+	function handleClick() {
+		pointerPreview = false;
+		focusPreview = false;
+		videoEl?.pause();
+		onclick();
+	}
 </script>
 
 <button
 	bind:this={el}
-	class="group relative w-full cursor-pointer overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-2)] ring-1 ring-[var(--border)] transition-all duration-500 ease-out hover:ring-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface-0)]
+	class="media-card group relative w-full cursor-pointer overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-2)] ring-1 ring-[var(--border)] transition-all duration-500 ease-out hover:ring-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface-0)]
 		{visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-6 scale-95'}"
 	style="aspect-ratio: var(--aspect, 1); transition-delay: {(index % 12) * 30}ms"
-	{onclick}
+	onclick={handleClick}
 	onfocus={handleFocus}
+	onblur={handleBlur}
+	onmouseenter={() => (pointerPreview = true)}
+	onmouseleave={() => (pointerPreview = false)}
 	type="button"
 	{tabindex}
 >
@@ -77,14 +157,14 @@
 	{#if media.type === 'video'}
 		<video
 			bind:this={videoEl}
-			src={media.url}
+			src={videoSrc}
 			class="h-full w-full object-cover transition-opacity duration-300 {loaded ? 'opacity-100' : 'opacity-0'}"
 			muted
 			loop
 			playsinline
 			disablepictureinpicture
 			preload="metadata"
-			onloadeddata={() => (loaded = true)}
+			onloadedmetadata={() => (loaded = true)}
 		></video>
 		{#if loaded}
 			<div class="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-[var(--radius-sm)] bg-[var(--surface-0)]/70 px-1 py-0.5">
@@ -114,6 +194,11 @@
 </button>
 
 <style>
+	.media-card {
+		content-visibility: auto;
+		contain-intrinsic-size: 180px 180px;
+	}
+
 	@keyframes shimmer {
 		0% { transform: translateX(-100%); }
 		100% { transform: translateX(100%); }
