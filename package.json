@@ -2,6 +2,8 @@
 	"name": "dir-media-viewer",
 	"private": true,
 	"version": "0.0.1",
+	"description": "A lightweight media viewer for browsing images and videos in local directories.",
+	"author": "masamunet",
 	"type": "module",
 	"main": "dist-electron/main.mjs",
 	"scripts": {
@@ -22,18 +24,16 @@
 		"@sveltejs/kit": "^2.50.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/vite": "^4.2.2",
+		"bits-ui": "^2.17.2",
 		"dotenv": "^17.4.1",
 		"electron": "^41.1.1",
 		"electron-builder": "^26.8.1",
 		"esbuild": "^0.28.0",
+		"lucide-svelte": "^1.0.1",
 		"svelte": "^5.54.0",
 		"svelte-check": "^4.4.2",
 		"tailwindcss": "^4.2.2",
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1"
-	},
-	"dependencies": {
-		"bits-ui": "^2.17.2",
-		"lucide-svelte": "^1.0.1"
 	}
 }

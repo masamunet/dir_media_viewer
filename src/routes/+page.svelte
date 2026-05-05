@@ -503,6 +503,7 @@
 		{/if}
 	</div>
 {:else}
+	<div class="electron-drag fixed inset-x-0 top-0 z-40 h-8"></div>
 	<div class="flex h-screen flex-col items-center justify-center gap-4">
 		{#if loading}
 			<div class="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"></div>

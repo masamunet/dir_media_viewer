@@ -36,3 +36,17 @@ body {
 	scrollbar-width: thin;
 	scrollbar-color: var(--surface-3) transparent;
 }
+
+.electron-drag {
+	-webkit-app-region: drag;
+}
+
+button,
+a,
+input,
+textarea,
+select,
+[role='button'],
+.electron-no-drag {
+	-webkit-app-region: no-drag;
+}

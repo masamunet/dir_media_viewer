@@ -18,6 +18,58 @@
 	} = $props();
 
 	let converting = $state(false);
+	let mediaAreaEl: HTMLDivElement | undefined = $state();
+	let mediaAreaWidth = $state(0);
+	let mediaAreaHeight = $state(0);
+	let mediaNaturalWidth = $state(0);
+	let mediaNaturalHeight = $state(0);
+
+	const fitMediaStyle = $derived.by(() => {
+		if (
+			$dialogSize !== 'fit' ||
+			mediaAreaWidth <= 0 ||
+			mediaAreaHeight <= 0 ||
+			mediaNaturalWidth <= 0 ||
+			mediaNaturalHeight <= 0
+		) {
+			return '';
+		}
+
+		const mediaAspect = mediaNaturalWidth / mediaNaturalHeight;
+		const areaAspect = mediaAreaWidth / mediaAreaHeight;
+		let width = mediaAreaWidth;
+		let height = mediaAreaHeight;
+
+		if (areaAspect > mediaAspect) {
+			width = height * mediaAspect;
+		} else {
+			height = width / mediaAspect;
+		}
+
+		return `width: ${width}px; height: ${height}px;`;
+	});
+
+	$effect(() => {
+		media;
+		mediaNaturalWidth = 0;
+		mediaNaturalHeight = 0;
+	});
+
+	$effect(() => {
+		const el = mediaAreaEl;
+		if (!el) return;
+
+		function updateMediaArea(target: HTMLDivElement) {
+			const rect = target.getBoundingClientRect();
+			mediaAreaWidth = rect.width;
+			mediaAreaHeight = rect.height;
+		}
+
+		updateMediaArea(el);
+		const observer = new ResizeObserver(() => updateMediaArea(el));
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
 
 	function triggerDownload(blob: Blob, baseName: string, ext: string) {
 		const url = URL.createObjectURL(blob);
@@ -61,6 +113,18 @@
 	function handleVideoEnded() {
 		onVideoEnded?.();
 	}
+
+	function handleImageLoad(event: Event) {
+		const img = event.currentTarget as HTMLImageElement;
+		mediaNaturalWidth = img.naturalWidth;
+		mediaNaturalHeight = img.naturalHeight;
+	}
+
+	function handleVideoMetadata(event: Event) {
+		const video = event.currentTarget as HTMLVideoElement;
+		mediaNaturalWidth = video.videoWidth;
+		mediaNaturalHeight = video.videoHeight;
+	}
 </script>
 
 <Dialog.Root bind:open>
@@ -71,11 +135,11 @@
 			onclick={() => (open = false)}
 		/>
 		<Dialog.Content
-			class="fixed inset-0 z-50 flex items-center justify-center p-2 focus-visible:outline-none sm:p-4"
+			class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-2 focus-visible:outline-none sm:p-4"
 		>
 			{#if media}
 				<div class="relative flex h-full w-full max-h-full max-w-full flex-col items-center justify-center pt-10">
-					<div class="absolute right-0 top-0 flex items-center gap-1">
+					<div class="pointer-events-auto absolute right-0 top-0 flex items-center gap-1">
 						<button
 							class="rounded-[var(--radius-sm)] p-1.5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent-cyan)]"
 							onclick={() => dialogSize.update((v) => (v === 'fit' ? 'original' : 'fit'))}
@@ -109,16 +173,19 @@
 						</Dialog.Close>
 					</div>
 
-					<div class="flex min-h-0 w-full flex-1 items-center justify-center">
+					<div bind:this={mediaAreaEl} class="flex min-h-0 w-full flex-1 items-center justify-center">
 						{#if media.type === 'video'}
+							<!-- svelte-ignore a11y_media_has_caption -->
 							<video
 								src={media.url}
 								class={$dialogSize === 'fit'
-									? 'h-full w-full rounded-[var(--radius-sm)] object-contain'
-									: 'rounded-[var(--radius-sm)]'}
+									? 'pointer-events-auto rounded-[var(--radius-sm)] object-contain'
+									: 'pointer-events-auto rounded-[var(--radius-sm)]'}
+								style={fitMediaStyle}
 								controls
 								autoplay
 								loop={!advanceOnVideoEnd}
+								onloadedmetadata={handleVideoMetadata}
 								onended={handleVideoEnded}
 							></video>
 						{:else}
@@ -126,14 +193,16 @@
 								src={media.url}
 								alt={media.name}
 								class={$dialogSize === 'fit'
-									? 'h-full w-full rounded-[var(--radius-sm)] object-contain'
-									: 'rounded-[var(--radius-sm)]'}
+									? 'pointer-events-auto rounded-[var(--radius-sm)] object-contain'
+									: 'pointer-events-auto rounded-[var(--radius-sm)]'}
+								style={fitMediaStyle}
 								draggable="false"
+								onload={handleImageLoad}
 							/>
 						{/if}
 					</div>
 
-					<p class="mt-2 max-w-full shrink-0 truncate px-2 text-center text-xs text-[var(--text-muted)]">{media.path}</p>
+					<p class="pointer-events-auto mt-2 max-w-full shrink-0 truncate px-2 text-center text-xs text-[var(--text-muted)]">{media.path}</p>
 				</div>
 			{/if}
 		</Dialog.Content>

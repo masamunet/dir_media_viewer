@@ -25,7 +25,7 @@
 	];
 </script>
 
-<header class="sticky top-0 z-40 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-0)]/95 px-4 py-2 backdrop-blur-sm">
+<header class="electron-drag sticky top-0 z-40 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-0)]/95 px-4 py-2 backdrop-blur-sm">
 	<div class="flex items-center gap-2 overflow-hidden">
 		{#if hasTree}
 			<button

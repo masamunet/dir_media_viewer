@@ -27,13 +27,19 @@
 		openNode(node.path);
 	}
 
-	function handleChevronClick(e: MouseEvent, node: TreeNode) {
+	function handleChevronClick(e: MouseEvent | KeyboardEvent, node: TreeNode) {
 		e.stopPropagation();
 		if (node.isExpanded) {
 			collapseNode(node.path);
 		} else {
 			expandNode(node.path);
 		}
+	}
+
+	function handleChevronKeydown(e: KeyboardEvent, node: TreeNode) {
+		if (e.key !== 'Enter' && e.key !== ' ') return;
+		e.preventDefault();
+		handleChevronClick(e, node);
 	}
 </script>
 
@@ -49,6 +55,7 @@
 		data-path={node.path}
 		role="treeitem"
 		aria-expanded={node.children.length > 0 ? node.isExpanded : undefined}
+		aria-selected={isSelected}
 		aria-current={isCursor ? 'true' : undefined}
 		aria-level={depth + 1}
 	>
@@ -58,6 +65,7 @@
 				class="tree-chevron"
 				class:tree-chevron--expanded={node.isExpanded}
 				onclick={(e) => handleChevronClick(e, node)}
+				onkeydown={(e) => handleChevronKeydown(e, node)}
 			>
 				<ChevronRight size={14} />
 			</span>

@@ -9,7 +9,7 @@
 	let { files, onSelect }: { files: MediaFile[]; onSelect: (file: MediaFile) => void } = $props();
 
 	let gridEl: HTMLDivElement;
-	let sentinelEl: HTMLDivElement;
+	let sentinelEl: HTMLDivElement | undefined = $state();
 	let averageAspect = $state(1);
 	let displayCount = $state(BATCH_SIZE);
 	let aspectGeneration = 0;
@@ -182,6 +182,7 @@
 	style="--aspect: {averageAspect.toFixed(3)}"
 	role="grid"
 	aria-label="メディアグリッド"
+	tabindex="-1"
 	onkeydown={handleGridKeydown}
 >
 	{#each visibleFiles as file, i (file.url)}
