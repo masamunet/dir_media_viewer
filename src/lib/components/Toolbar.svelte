@@ -17,12 +17,21 @@
 		gridSize,
 		recursive,
 		mediaFilter,
-		mediaSortOrder,
+		directorySortOrder,
 		type GridSize,
 		type MediaFilter
 	} from '$lib/stores/preferences';
 
-	let { dirName = '', fileCount = 0, onClear, treePath = '', hasTree = false, drawerOpen = false, onToggleDrawer }: {
+	let {
+		dirName = '',
+		fileCount = 0,
+		onClear,
+		treePath = '',
+		hasTree = false,
+		drawerOpen = false,
+		onToggleDrawer,
+		onToggleDirectorySortOrder
+	}: {
 		dirName: string;
 		fileCount: number;
 		onClear: () => void;
@@ -30,6 +39,7 @@
 		hasTree?: boolean;
 		drawerOpen?: boolean;
 		onToggleDrawer?: () => void;
+		onToggleDirectorySortOrder?: () => void;
 	} = $props();
 
 	const sizes: { value: GridSize; icon: typeof Grid2x2; label: string; key: string }[] = [
@@ -85,24 +95,26 @@
 
 		<div class="mx-1 h-4 w-px bg-[var(--border)]"></div>
 
-		<button
-			tabindex={-1}
-			class="flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors
-				{$mediaSortOrder === 'desc' ? 'bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
-			onclick={() => mediaSortOrder.update((v) => v === 'asc' ? 'desc' : 'asc')}
-			title="並び順: {$mediaSortOrder === 'asc' ? '昇順' : '降順'} [S]"
-		>
-			{#if $mediaSortOrder === 'asc'}
-				<ArrowUpAZ class="h-3.5 w-3.5" />
-				<span>Asc</span>
-			{:else}
-				<ArrowDownZA class="h-3.5 w-3.5" />
-				<span>Desc</span>
-			{/if}
-			<kbd class="ml-0.5 text-[9px] opacity-40">S</kbd>
-		</button>
+		{#if hasTree}
+			<button
+				tabindex={-1}
+				class="flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors
+					{$directorySortOrder === 'desc' ? 'bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
+				onclick={onToggleDirectorySortOrder}
+				title="ディレクトリ並び順: {$directorySortOrder === 'asc' ? '昇順' : '降順'} [S]"
+			>
+				{#if $directorySortOrder === 'asc'}
+					<ArrowUpAZ class="h-3.5 w-3.5" />
+					<span>Asc</span>
+				{:else}
+					<ArrowDownZA class="h-3.5 w-3.5" />
+					<span>Desc</span>
+				{/if}
+				<kbd class="ml-0.5 text-[9px] opacity-40">S</kbd>
+			</button>
 
-		<div class="mx-1 h-4 w-px bg-[var(--border)]"></div>
+			<div class="mx-1 h-4 w-px bg-[var(--border)]"></div>
+		{/if}
 
 		{#each filters as f}
 			<button

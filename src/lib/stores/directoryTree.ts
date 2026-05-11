@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import type { MediaFile } from '$lib/stores/media';
+import type { DirectorySortOrder } from '$lib/stores/preferences';
 
 export interface TreeNode {
 	name: string;
@@ -56,6 +57,28 @@ function cloneTree(node: TreeNode): TreeNode {
 		...node,
 		children: node.children.map(cloneTree)
 	};
+}
+
+function compareTreeNodes(a: TreeNode, b: TreeNode) {
+	return a.name.localeCompare(b.name) || a.path.localeCompare(b.path);
+}
+
+export function sortTree(node: TreeNode, order: DirectorySortOrder): TreeNode {
+	const children = node.children
+		.map((child) => sortTree(child, order))
+		.sort((a, b) => {
+			const result = compareTreeNodes(a, b);
+			return order === 'asc' ? result : -result;
+		});
+
+	return {
+		...node,
+		children
+	};
+}
+
+export function sortTreeRoot(order: DirectorySortOrder) {
+	treeRoot.update((root) => root ? sortTree(root, order) : root);
 }
 
 export function expandNode(path: string) {

@@ -11,7 +11,13 @@
 		setDirHandle, getDirHandle, getDirSource,
 		type MediaFile
 	} from '$lib/stores/media';
-	import { recursive, mediaFilter, gridSize, mediaSortOrder } from '$lib/stores/preferences';
+	import {
+		recursive,
+		mediaFilter,
+		gridSize,
+		directorySortOrder,
+		type DirectorySortOrder
+	} from '$lib/stores/preferences';
 	import {
 		processDropEvent, rescanDirectory, pickDirectory, rescanDirectoryHandle,
 		scanDirectoryTreeFromEntry, scanDirectoryTreeFromHandle,
@@ -19,7 +25,7 @@
 	} from '$lib/utils/fileReader';
 	import {
 		drawerOpen, treeRoot, cursorPath, selectedPath, treeFiles,
-		findNode, resetTree, collapseNode,
+		findNode, resetTree, collapseNode, sortTree, sortTreeRoot,
 		moveCursorUp, moveCursorDown, moveCursorToParent, moveCursorToChild, openNode
 	} from '$lib/stores/directoryTree';
 
@@ -31,21 +37,10 @@
 	// When tree mode is active, show tree-selected files (even if drawer is closed)
 	const displayFiles = $derived($treeRoot ? $treeFiles : $mediaFiles);
 
-	function compareMediaFiles(a: MediaFile, b: MediaFile) {
-		return a.name.localeCompare(b.name) || a.path.localeCompare(b.path);
-	}
-
-	const sortedFiles = $derived(
-		[...displayFiles].sort((a, b) => {
-			const result = compareMediaFiles(a, b);
-			return $mediaSortOrder === 'asc' ? result : -result;
-		})
-	);
-
 	const filteredFiles = $derived(
 		$mediaFilter === 'all'
-			? sortedFiles
-			: sortedFiles.filter((f) => f.type === $mediaFilter)
+			? displayFiles
+			: displayFiles.filter((f) => f.type === $mediaFilter)
 	);
 	const videoOnlyDisplay = $derived(
 		filteredFiles.length > 0 && filteredFiles.every((f) => f.type === 'video')
@@ -53,6 +48,11 @@
 
 	let dragCounter = 0;
 	let scanGeneration = 0;
+	let appliedDirectorySortOrder = $state<DirectorySortOrder | null>(null);
+
+	function toggleDirectorySortOrder() {
+		directorySortOrder.update((v) => v === 'asc' ? 'desc' : 'asc');
+	}
 
 	function handleDragEnter(e: DragEvent) {
 		e.preventDefault();
@@ -104,7 +104,7 @@
 
 				const tree = await scanDirectoryTreeFromEntry(dirEntry);
 				if (gen !== scanGeneration) return;
-				treeRoot.set(tree);
+				treeRoot.set(sortTree(tree, $directorySortOrder));
 				cursorPath.set(tree.path);
 				selectedPath.set(tree.path);
 				drawerOpen.set(true);
@@ -150,7 +150,7 @@
 			// Build directory tree and open drawer
 			const tree = await scanDirectoryTreeFromHandle(result.dirHandle);
 			if (gen !== scanGeneration) return;
-			treeRoot.set(tree);
+			treeRoot.set(sortTree(tree, $directorySortOrder));
 			cursorPath.set(tree.path);
 			selectedPath.set(tree.path);
 			drawerOpen.set(true);
@@ -255,6 +255,13 @@
 		if (getDirSource() && !$treeRoot) {
 			handleRescan();
 		}
+	});
+
+	$effect(() => {
+		const order = $directorySortOrder;
+		if (appliedDirectorySortOrder === order) return;
+		appliedDirectorySortOrder = order;
+		sortTreeRoot(order);
 	});
 
 	function navigateDialog(direction: 1 | -1) {
@@ -456,8 +463,9 @@
 				break;
 			case 's':
 			case 'S':
+				if (!$treeRoot) return;
 				e.preventDefault();
-				mediaSortOrder.update((v) => v === 'asc' ? 'desc' : 'asc');
+				toggleDirectorySortOrder();
 				break;
 			case '1':
 				e.preventDefault();
@@ -502,6 +510,7 @@
 			hasTree={!!$treeRoot}
 			drawerOpen={$drawerOpen}
 			onToggleDrawer={() => drawerOpen.update(v => !v)}
+			onToggleDirectorySortOrder={toggleDirectorySortOrder}
 		/>
 		{#if loading}
 			<div class="flex flex-col items-center justify-center py-32 gap-3">

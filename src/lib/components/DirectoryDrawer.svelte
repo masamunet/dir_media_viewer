@@ -25,6 +25,7 @@
 			<span>←/⇧ 親</span>
 			<span>→ 子</span>
 			<span>Space 開く</span>
+			<span>S 昇降</span>
 			<span>⇧⇧ 閉じる</span>
 		</div>
 	</aside>
