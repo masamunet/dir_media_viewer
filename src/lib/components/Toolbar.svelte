@@ -1,6 +1,26 @@
 <script lang="ts">
-	import { Columns2, Grid2x2, Grid3x3, FolderTree, X, Image, Film, Layers, PanelLeftOpen, PanelLeftClose } from 'lucide-svelte';
-	import { gridSize, recursive, mediaFilter, type GridSize, type MediaFilter } from '$lib/stores/preferences';
+	import {
+		ArrowDownZA,
+		ArrowUpAZ,
+		Columns2,
+		Grid2x2,
+		Grid3x3,
+		FolderTree,
+		X,
+		Image,
+		Film,
+		Layers,
+		PanelLeftOpen,
+		PanelLeftClose
+	} from 'lucide-svelte';
+	import {
+		gridSize,
+		recursive,
+		mediaFilter,
+		mediaSortOrder,
+		type GridSize,
+		type MediaFilter
+	} from '$lib/stores/preferences';
 
 	let { dirName = '', fileCount = 0, onClear, treePath = '', hasTree = false, drawerOpen = false, onToggleDrawer }: {
 		dirName: string;
@@ -61,6 +81,25 @@
 			<FolderTree class="h-3.5 w-3.5" />
 			<span>Recursive</span>
 			<kbd class="ml-0.5 text-[9px] opacity-40">R</kbd>
+		</button>
+
+		<div class="mx-1 h-4 w-px bg-[var(--border)]"></div>
+
+		<button
+			tabindex={-1}
+			class="flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors
+				{$mediaSortOrder === 'desc' ? 'bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
+			onclick={() => mediaSortOrder.update((v) => v === 'asc' ? 'desc' : 'asc')}
+			title="並び順: {$mediaSortOrder === 'asc' ? '昇順' : '降順'} [S]"
+		>
+			{#if $mediaSortOrder === 'asc'}
+				<ArrowUpAZ class="h-3.5 w-3.5" />
+				<span>Asc</span>
+			{:else}
+				<ArrowDownZA class="h-3.5 w-3.5" />
+				<span>Desc</span>
+			{/if}
+			<kbd class="ml-0.5 text-[9px] opacity-40">S</kbd>
 		</button>
 
 		<div class="mx-1 h-4 w-px bg-[var(--border)]"></div>

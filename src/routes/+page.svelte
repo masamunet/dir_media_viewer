@@ -11,7 +11,7 @@
 		setDirHandle, getDirHandle, getDirSource,
 		type MediaFile
 	} from '$lib/stores/media';
-	import { recursive, mediaFilter, gridSize } from '$lib/stores/preferences';
+	import { recursive, mediaFilter, gridSize, mediaSortOrder } from '$lib/stores/preferences';
 	import {
 		processDropEvent, rescanDirectory, pickDirectory, rescanDirectoryHandle,
 		scanDirectoryTreeFromEntry, scanDirectoryTreeFromHandle,
@@ -31,10 +31,21 @@
 	// When tree mode is active, show tree-selected files (even if drawer is closed)
 	const displayFiles = $derived($treeRoot ? $treeFiles : $mediaFiles);
 
+	function compareMediaFiles(a: MediaFile, b: MediaFile) {
+		return a.name.localeCompare(b.name) || a.path.localeCompare(b.path);
+	}
+
+	const sortedFiles = $derived(
+		[...displayFiles].sort((a, b) => {
+			const result = compareMediaFiles(a, b);
+			return $mediaSortOrder === 'asc' ? result : -result;
+		})
+	);
+
 	const filteredFiles = $derived(
 		$mediaFilter === 'all'
-			? displayFiles
-			: displayFiles.filter((f) => f.type === $mediaFilter)
+			? sortedFiles
+			: sortedFiles.filter((f) => f.type === $mediaFilter)
 	);
 	const videoOnlyDisplay = $derived(
 		filteredFiles.length > 0 && filteredFiles.every((f) => f.type === 'video')
@@ -442,6 +453,11 @@
 			case 'V':
 				e.preventDefault();
 				mediaFilter.set('video');
+				break;
+			case 's':
+			case 'S':
+				e.preventDefault();
+				mediaSortOrder.update((v) => v === 'asc' ? 'desc' : 'asc');
 				break;
 			case '1':
 				e.preventDefault();
