@@ -3,7 +3,7 @@ import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createRequire } from 'module';
+import { createRequire as createNodeRequire } from 'module';
 import { MAX_FILE_SIZE } from '../constants.js';
 
 export { MAX_FILE_SIZE };
@@ -18,7 +18,7 @@ export function sanitizeFilename(name: string): string {
 	return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+|\.+$/g, '_');
 }
 
-const require = createRequire(import.meta.url);
+const requireFromConvert = createNodeRequire(import.meta.url);
 const FALLBACK_FFMPEG_PATHS = [
 	'/opt/homebrew/bin/ffmpeg',
 	'/usr/local/bin/ffmpeg',
@@ -37,7 +37,7 @@ export function getFfmpegPath(): string {
 	}
 
 	try {
-		const staticPath = require('ffmpeg-static') as string | null;
+		const staticPath = requireFromConvert('ffmpeg-static') as string | null;
 		if (staticPath) {
 			const resolvedPath = resolveUnpackedAsarPath(staticPath);
 			if (existsSync(resolvedPath)) return resolvedPath;
