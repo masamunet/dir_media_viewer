@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
-import { readFile } from 'fs/promises';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
 import { join, resolve as resolvePath, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { createServer, type Server } from 'http';
 import { existsSync } from 'fs';
+import { randomUUID } from 'crypto';
 import { MAX_FILE_SIZE } from '../src/lib/constants.js';
 import { convertMedia, isMediaType } from '../src/lib/server/convert.js';
 
@@ -25,13 +26,9 @@ const MIME_TYPES: Record<string, string> = {
 	'.ttf': 'font/ttf'
 };
 
-// IPC: convert media file (strip metadata, re-encode)
-ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: string) => {
+function validatedMediaBuffer(arrayBuffer: unknown): Buffer {
 	if (!(arrayBuffer instanceof ArrayBuffer)) {
 		throw new Error('Invalid payload: expected ArrayBuffer');
-	}
-	if (!isMediaType(mediaType)) {
-		throw new Error('Invalid media type');
 	}
 
 	const buffer = Buffer.from(arrayBuffer);
@@ -39,12 +36,66 @@ ipcMain.handle('convert-media', async (_event, arrayBuffer: unknown, mediaType: 
 		throw new Error('File too large');
 	}
 
-	try {
-		return await convertMedia(buffer, mediaType);
-	} catch (e) {
-		console.error('convert-media IPC error:', e);
-		throw e;
+	return buffer;
+}
+
+function defaultExportFilename(defaultFilename: unknown, mediaType: 'image' | 'video'): string {
+	const ext = mediaType === 'video' ? '.mp4' : '.jpg';
+	const fallback = mediaType === 'video' ? `export${ext}` : `export${ext}`;
+	if (typeof defaultFilename !== 'string' || !defaultFilename.trim()) return fallback;
+
+	const cleaned = defaultFilename.trim().replace(/[/:\\]/g, '_');
+	return cleaned.toLowerCase().endsWith(ext) ? cleaned : `${cleaned}${ext}`;
+}
+
+const pendingExportPaths = new Map<string, string>();
+
+// IPC: choose an export destination before starting expensive conversion work.
+ipcMain.handle('select-export-path', async (event, mediaType: string, defaultFilename: unknown) => {
+	if (!isMediaType(mediaType)) {
+		throw new Error('Invalid media type');
 	}
+	const win = BrowserWindow.fromWebContents(event.sender);
+	const saveOptions = {
+		defaultPath: defaultExportFilename(defaultFilename, mediaType),
+		filters: [
+			mediaType === 'video'
+				? { name: 'MP4 Video', extensions: ['mp4'] }
+				: { name: 'JPEG Image', extensions: ['jpg', 'jpeg'] }
+		]
+	};
+	const saveResult = win
+		? await dialog.showSaveDialog(win, saveOptions)
+		: await dialog.showSaveDialog(saveOptions);
+
+	if (saveResult.canceled || !saveResult.filePath) {
+		return { canceled: true };
+	}
+
+	const token = randomUUID();
+	pendingExportPaths.set(token, saveResult.filePath);
+	return { canceled: false, token, filePath: saveResult.filePath };
+});
+
+// IPC: convert media and write it to a destination selected by select-export-path.
+ipcMain.handle('write-export-media', async (_event, token: unknown, arrayBuffer: unknown, mediaType: string) => {
+	if (typeof token !== 'string') {
+		throw new Error('Invalid export token');
+	}
+	if (!isMediaType(mediaType)) {
+		throw new Error('Invalid media type');
+	}
+
+	const filePath = pendingExportPaths.get(token);
+	if (!filePath) {
+		throw new Error('Export destination expired');
+	}
+	pendingExportPaths.delete(token);
+
+	const buffer = validatedMediaBuffer(arrayBuffer);
+	const result = await convertMedia(buffer, mediaType);
+	await writeFile(filePath, Buffer.from(result.buffer));
+	return { filePath };
 });
 
 // Simple static file server for production build.

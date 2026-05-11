@@ -2,7 +2,7 @@
 	import { Dialog } from 'bits-ui';
 	import { X, Download, Maximize, Minimize, Loader2 } from 'lucide-svelte';
 	import { dialogSize } from '$lib/stores/preferences';
-	import { isElectron, convertMediaElectron } from '$lib/electron';
+	import { isElectron, exportMediaElectron } from '$lib/electron';
 	import type { MediaFile } from '$lib/stores/media';
 
 	let {
@@ -23,6 +23,8 @@
 	let mediaAreaHeight = $state(0);
 	let mediaNaturalWidth = $state(0);
 	let mediaNaturalHeight = $state(0);
+	let convertError = $state('');
+	let exportedPath = $state('');
 
 	const fitMediaStyle = $derived.by(() => {
 		if (
@@ -53,6 +55,8 @@
 		media;
 		mediaNaturalWidth = 0;
 		mediaNaturalHeight = 0;
+		convertError = '';
+		exportedPath = '';
 	});
 
 	$effect(() => {
@@ -83,31 +87,54 @@
 	}
 
 	async function handleConvert() {
-		if (!media) return;
+		if (!media || converting) return;
 		converting = true;
+		convertError = '';
+		exportedPath = '';
 
 		try {
 			const ext = media.type === 'video' ? 'mp4' : 'jpg';
-			const baseName = media.name.replace(/\.[^.]+$/, '');
-			let blob: Blob;
+			const baseName = media.name.replace(/\.[^.]+$/, '') || 'download';
 
 			if (isElectron()) {
-				blob = await convertMediaElectron(media.file, media.type);
+				const result = await exportMediaElectron(media.file, media.type, `${baseName}.${ext}`);
+				if (!result.canceled) {
+					exportedPath = result.filePath ?? '書き出しました';
+				}
 			} else {
 				const formData = new FormData();
 				formData.append('file', media.file);
 				formData.append('type', media.type);
 				const res = await fetch('/api/convert', { method: 'POST', body: formData });
-				if (!res.ok) throw new Error('Conversion failed');
-				blob = await res.blob();
+				if (!res.ok) {
+					let message = 'Conversion failed';
+					try {
+						const body = await res.json();
+						if (typeof body?.error === 'string') message = body.error;
+					} catch {
+						// Keep the generic message when the response is not JSON.
+					}
+					throw new Error(message);
+				}
+				const blob = await res.blob();
+				triggerDownload(blob, baseName, ext);
 			}
-
-			triggerDownload(blob, baseName, ext);
 		} catch (e) {
 			console.error('Convert error:', e);
+			convertError = e instanceof Error ? e.message : '書き出しに失敗しました';
 		} finally {
 			converting = false;
 		}
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (!open || event.ctrlKey || event.metaKey || event.altKey) return;
+		if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+		if (event.key !== 'd' && event.key !== 'D') return;
+
+		event.preventDefault();
+		event.stopPropagation();
+		handleConvert();
 	}
 
 	function handleVideoEnded() {
@@ -126,6 +153,8 @@
 		mediaNaturalHeight = video.videoHeight;
 	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <Dialog.Root bind:open>
 	<Dialog.Portal>
@@ -202,7 +231,14 @@
 						{/if}
 					</div>
 
-					<p class="pointer-events-auto mt-2 max-w-full shrink-0 truncate px-2 text-center text-xs text-[var(--text-muted)]">{media.path}</p>
+					<div class="pointer-events-auto mt-2 flex max-w-full shrink-0 flex-col items-center gap-1 px-2 text-center text-xs">
+						<p class="max-w-full truncate text-[var(--text-muted)]">{media.path}</p>
+						{#if convertError}
+							<p role="alert" class="max-w-full text-[var(--accent-alt)]">{convertError}</p>
+						{:else if exportedPath}
+							<p class="max-w-full truncate text-[var(--accent-cyan)]">書き出しました: {exportedPath}</p>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</Dialog.Content>

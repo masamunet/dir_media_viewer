@@ -5,7 +5,10 @@ directories:
 files:
   - build/**/*
   - dist-electron/**/*
+  - node_modules/ffmpeg-static/**/*
   - package.json
+asarUnpack:
+  - node_modules/ffmpeg-static/**/*
 mac:
   target: dmg
   category: public.app-category.utilities
